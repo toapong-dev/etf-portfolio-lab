@@ -8,6 +8,7 @@ from collections import defaultdict, Counter
 
 DATA, OUTD = sys.argv[1], sys.argv[2]
 CATS = sys.argv[3] if len(sys.argv) > 3 else None
+RETS = sys.argv[4] if len(sys.argv) > 4 else None  # optional: fund database returns (code,1M,...,10Y,2014,...)
 os.makedirs(OUTD + '/d', exist_ok=True)
 for f in glob.glob(OUTD + '/d/*.json'): os.remove(f)
 
@@ -40,6 +41,13 @@ for pid, rows in classes.items():
 cat = {}
 if CATS and os.path.exists(CATS):
     for r in csv.DictReader(open(CATS, encoding='utf8')): cat[r['code']] = r
+dbr, DBCOLS = {}, []
+if RETS and os.path.exists(RETS):
+    rd = csv.reader(open(RETS, encoding='utf8')); DBCOLS = next(rd)[1:]
+    def num(x):
+        try: return round(float(x) / 100, 5)
+        except ValueError: return None
+    for r in rd: dbr[r[0].strip()] = [num(x) for x in r[1:]]
 print('profiles', len(prof), 'codes', len(meta), 'categorised', len(cat))
 
 # ---- NAV ----
@@ -133,7 +141,7 @@ for code in sorted(nav):
     index.append({'t': code, 'n': m.get('name') or code, 'c': c.get('category') or '', 'f': c.get('amc') or m.get('amc') or '',
         'er': None, 'aum': aum.get(code, (0, None))[1], 'y': None, 'inc': (m.get('regis') or DATES[s])[:10], 's': s, 'e': e, 'px': px, 'proxy': None,
         'r': [ret(1), ret(3), ret(6), ret(ytd=True), ret(12), ret(36), ret(60), ret(120), ret(240)], 'v': vol, 'dd': round(math.exp(dd / 1e4) - 1, 4), 'flag': big,
-        'mf': c.get('master') or m.get('master') or None, 'ft': c.get('type') or m.get('tax') or None, 'st': c.get('style') or None, 'dv': c.get('dividend') or None, 'th': m.get('name_th')})
+        'mf': c.get('master') or m.get('master') or None, 'ft': c.get('type') or m.get('tax') or None, 'st': c.get('style') or None, 'dv': c.get('dividend') or None, 'th': m.get('name_th'), 'db': dbr.get(code)})
 print('kept', len(index), 'skipped', dict(skipped))
 
 # cash proxy for "Optionality" and the risk-free rate: the largest Thai money-market fund with 3+ years of history
@@ -154,11 +162,11 @@ for k, sh in enumerate(shards):
     json.dump({t: {'s': s, 'd': txt} for t, s, txt in sh}, open(f'{OUTD}/d/{k}.json', 'w'), separators=(',', ':'))
     for t, _, _ in sh: pos[t]['k'] = k
 def r4(x): return None if x is None else float(f'{x:.4g}')
-cols = ['t', 'n', 'c', 'f', 'er', 'aum', 'y', 'inc', 's', 'e', 'px', 'k', 'r', 'v', 'dd', 'flag', 'proxy', 'mf', 'ft', 'st', 'dv', 'th']
+cols = ['t', 'n', 'c', 'f', 'er', 'aum', 'y', 'inc', 's', 'e', 'px', 'k', 'r', 'v', 'dd', 'flag', 'proxy', 'mf', 'ft', 'st', 'dv', 'th', 'db']
 rows = [[i['t'], i['n'], i['c'], i['f'], None, r4(i['aum']), None, i['inc'], i['s'], i['e'], i['px'], i['k'], i['r'], i['v'], i['dd'], i['flag'], None,
-         i['mf'], i['ft'], i['st'], i['dv'], i['th']] for i in index]
+         i['mf'], i['ft'], i['st'], i['dv'], i['th'], i['db']] for i in index]
 st = json.load(open(f'{DATA}/state.json')) if os.path.exists(f'{DATA}/state.json') else {}
 json.dump({'asof': LAST, 'built': dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%MZ'), 'src_updated': st.get('fetched_utc'),
-           'backfill_left': st.get('backfill_left'), 'ppy': PPY, 'cash': CASH, 'dates': DATES, 'cols': cols, 'etfs': rows},
+           'backfill_left': st.get('backfill_left'), 'ppy': PPY, 'cash': CASH, 'dbcols': DBCOLS, 'dbasof': os.environ.get('DB_ASOF'), 'dates': DATES, 'cols': cols, 'etfs': rows},
           open(f'{OUTD}/etfs.json', 'w', encoding='utf8'), ensure_ascii=False, separators=(',', ':'))
 print('shards', len(shards), 'MB', sum(os.path.getsize(f'{OUTD}/d/{k}.json') for k in range(len(shards))) / 1e6, 'asof', LAST, 'ppy', PPY)
