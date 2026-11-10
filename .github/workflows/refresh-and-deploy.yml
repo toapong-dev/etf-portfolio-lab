@@ -54,7 +54,7 @@ jobs:
           SEC_API_KEY: ${{ secrets.SEC_API_KEY || secrets.INVESTORBOTFUNDNAV }}
         run: |
           mkdir -p thai-data
-          python3 -I thai/scripts/sec_fetch.py thai-data --since 2016-01-01 --budget-min ${{ github.event.inputs.thai_budget || '270' }}
+          python3 -I thai/scripts/sec_fetch.py thai-data --since 2016-01-01 --budget-min ${{ github.event.inputs.thai_budget || (github.event_name == 'push' && '5') || '270' }}
       - name: Save Thai NAV history
         continue-on-error: true
         env:
