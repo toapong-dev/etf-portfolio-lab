@@ -571,7 +571,7 @@ function chartEndIdx(){ const ks=S.holdings.map(h=>h.t); let b=0; ks.forEach(t=>
 function rangeStart(end){
   const r=S.range, e=DATES[end];
   if(r==='1D') return end-1; if(r==='5D') return end-5;
-  if(r==='YTD') return idxOnOrBefore((+e.slice(0,4)-1)+'-12-31');
+  if(r==='YTD') return Math.max(0, idxOnOrBefore((+e.slice(0,4)-1)+'-12-31'));
   if(r==='MAX') return PORT ? PORT.a : commonRange(S.holdings.map(h=>h.t))[0];
   if(r==='ALL') return Math.min(...S.holdings.map(h=>rng(h.t)[0]), PORT?PORT.a:N-1);
   const m=RANGES.find(x=>x[0]===r)[1]; return Math.max(0, idxOnOrBefore(shiftDate(e,-m)));
