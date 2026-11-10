@@ -72,8 +72,11 @@ jobs:
         run: |
           mkdir -p site/thai
           if [ -f thai-data/profiles.json.gz ]; then
-            python3 -I thai/scripts/build.py thai-data site/thai thai/categories.csv
-            python3 -I thai/scripts/make_page.py index.html site/thai/index.html
+            if python3 -I thai/scripts/build.py thai-data site/thai thai/categories.csv; then
+              python3 -I thai/scripts/make_page.py index.html site/thai/index.html
+            else
+              cp thai/pending.html site/thai/index.html
+            fi
           else
             cp thai/pending.html site/thai/index.html
           fi
