@@ -46,6 +46,7 @@ print('profiles', len(prof), 'codes', len(meta), 'categorised', len(cat))
 nav = defaultdict(dict); aum = {}
 for f in sorted(glob.glob(f'{DATA}/nav/*.csv.gz')):
     for pid, cls, d, v, na in csv.reader(rgz(f)):
+        d = (d or '')[:10]
         code = key2code.get((pid, cls)) or key2code.get((pid, 'main'))
         if not code: continue
         try: v = float(v)
@@ -64,7 +65,7 @@ if os.path.exists(f'{DATA}/dividends.csv.gz'):
         try: val = float(val)
         except ValueError: continue
         code = abbr if abbr in nav else key2code.get((pid, 'main'))
-        if code and bcd and val > 0: divs[code].append((bcd, val))
+        if code and bcd and val > 0: divs[code].append((bcd[:10], val))
 
 # ---- global date axis: Thai business days (dates on which a good share of funds report) ----
 cnt = Counter(d for s in nav.values() for d in s)
@@ -129,7 +130,7 @@ for code in sorted(nav):
     for v in vals: pk = max(pk, v); dd = min(dd, v - pk)
     m, c = meta.get(code, {}), cat.get(code, {})
     index.append({'t': code, 'n': m.get('name') or code, 'c': c.get('category') or '', 'f': c.get('amc') or m.get('amc') or '',
-        'er': None, 'aum': aum.get(code, (0, None))[1], 'y': None, 'inc': m.get('regis') or DATES[s], 's': s, 'e': e, 'px': px, 'proxy': None,
+        'er': None, 'aum': aum.get(code, (0, None))[1], 'y': None, 'inc': (m.get('regis') or DATES[s])[:10], 's': s, 'e': e, 'px': px, 'proxy': None,
         'r': [ret(1), ret(3), ret(6), ret(ytd=True), ret(12), ret(36), ret(60), ret(120), ret(240)], 'v': vol, 'dd': round(math.exp(dd / 1e4) - 1, 4), 'flag': big,
         'mf': c.get('master') or m.get('master') or None, 'ft': c.get('type') or m.get('tax') or None, 'st': c.get('style') or None, 'dv': c.get('dividend') or None, 'th': m.get('name_th')})
 print('kept', len(index), 'skipped', dict(skipped))

@@ -80,26 +80,27 @@ def wgz(name, text):
     os.replace(tmp, f'{DATA}/{name}')
 
 # 1. profiles (fund list, classes, master funds): slow (~3 s a call), so refresh at most weekly
-pp = f'{DATA}/profiles.json.gz'
-fresh = os.path.exists(pp) and time.time() - os.path.getmtime(pp) < 6 * 86400 and os.environ.get('SEC_FORCE_PROFILES') != '1'
+pp, state_p = f'{DATA}/profiles.json.gz', f'{DATA}/state.json'
+state = json.load(open(state_p)) if os.path.exists(state_p) else {'complete': []}
+# file times reset on checkout, so the fetch time lives in state.json
+fresh = os.path.exists(pp) and time.time() - state.get('profiles_ts', 0) < 6 * 86400 and os.environ.get('SEC_FORCE_PROFILES') != '1'
 prof = [] if fresh else list(pages('/v2/fund/general-info/profiles', {}))
 keep = ['proj_id', 'proj_abbr_name', 'proj_name_en', 'proj_name_th', 'comp_name_en', 'unique_id', 'fund_status', 'regis_date', 'cancel_date',
         'management_style', 'feederfund_master_fund', 'invest_country_flag', 'fund_class_name', 'fund_class_tax_incentive_type', 'fund_class_isin_code']
 if prof:
+    state['profiles_ts'] = time.time()
     wgz('profiles.json.gz', json.dumps([{k: p.get(k) for k in keep} for p in prof], ensure_ascii=False, separators=(',', ':')))
 print('profiles', len(prof) if prof else 'kept (fetched this week)', 'calls', CALLS[0], f'{int(time.time()-T0)}s', flush=True)
 
 # 2. dividends
 dv = list(pages('/v2/fund/daily-info/dividend-history', {}))
 buf = io.StringIO(); w = csv.writer(buf)
-for d in dv: w.writerow([d.get('proj_id'), d.get('class_abbr_name'), d.get('book_close_date'), d.get('dividend_date'), d.get('dividend_value')])
+for d in dv: w.writerow([d.get('proj_id'), d.get('class_abbr_name'), (d.get('book_close_date') or '')[:10], (d.get('dividend_date') or '')[:10], d.get('dividend_value')])
 wgz('dividends.csv.gz', buf.getvalue())
 print('dividends', len(dv), 'calls', CALLS[0], f'{int(time.time()-T0)}s', flush=True)
 T1 = time.time()  # the time budget covers the NAV download
 
 # 3. NAV by month
-state_p = f'{DATA}/state.json'
-state = json.load(open(state_p)) if os.path.exists(state_p) else {'complete': []}
 today = dt.date.today()
 def months():
     y, m = map(int, SINCE[:7].split('-'))
@@ -121,7 +122,7 @@ def fetch_month(m):
         out = []
         for it in pages('/v2/fund/daily-info/nav', {'start_nav_date': d.isoformat(), 'end_nav_date': d.isoformat()}):
             if it.get('last_val') in (None, '', 0): continue
-            out.append((it.get('proj_id'), it.get('fund_class_name') or 'main', it.get('nav_date'), it.get('last_val'), it.get('net_asset')))
+            out.append((it.get('proj_id'), it.get('fund_class_name') or 'main', (it.get('nav_date') or '')[:10], it.get('last_val'), it.get('net_asset')))
         return out
     days = [dt.date(y, mm, 1) + dt.timedelta(days=i) for i in range((end - dt.date(y, mm, 1)).days + 1)]
     days = [d for d in days if d.weekday() < 5 and d <= today]
