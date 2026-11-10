@@ -13,7 +13,7 @@ because AMCs revise late NAVs. Stops cleanly when the time budget runs out, so a
 can be spread over several runs.
 """
 import os, sys, json, gzip, csv, io, time, threading, datetime as dt, urllib.request, urllib.parse, urllib.error
-from collections import deque
+from collections import deque, Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 DATA = sys.argv[1]
@@ -28,7 +28,7 @@ if not KEY:
 os.makedirs(DATA + '/nav', exist_ok=True)
 
 class Limiter:  # SEC portal: at most 5000 calls per 300 s and >=16 ms between calls
-    def __init__(s, calls=4800, period=300.0, gap=0.02):
+    def __init__(s, calls=4000, period=300.0, gap=0.05):
         s.calls, s.period, s.gap, s.hits, s.last, s.lock = calls, period, gap, deque(), 0.0, threading.Lock()
     def wait(s):
         with s.lock:
@@ -39,7 +39,7 @@ class Limiter:  # SEC portal: at most 5000 calls per 300 s and >=16 ms between c
             g = s.gap - (time.monotonic() - s.last)
             if g > 0: time.sleep(g)
             s.last = time.monotonic(); s.hits.append(s.last)
-LIM = Limiter(); CALLS = [0]
+LIM = Limiter(); CALLS = [0]; RETRIES = Counter()
 
 def get(path, params):
     url = f'{BASE}{path}?{urllib.parse.urlencode(params)}'
@@ -59,9 +59,13 @@ def get(path, params):
             if e.code == 400 and params.get('start_nav_date') and params.get('start_nav_date') == params.get('end_nav_date') and not params.get('next_cursor'):
                 return {}  # the NAV endpoint answers 400 for a market holiday with no NAV
             if e.code in (421, 429) or e.code >= 500:
+                RETRIES[e.code] += 1
+                if sum(RETRIES.values()) <= 5: print('retry', e.code, body[:120], flush=True)
                 ra = e.headers.get('Retry-After'); time.sleep(float(ra) if ra and ra.isdigit() else min(60, 2 ** attempt)); continue
             raise RuntimeError(f'HTTP {e.code} {url}: {body}')
         except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            RETRIES[type(e).__name__] += 1
+            if sum(RETRIES.values()) <= 5: print('retry', repr(e)[:120], flush=True)
             time.sleep(min(60, 2 ** attempt))
     raise RuntimeError(f'gave up on {url}')
 
@@ -132,6 +136,12 @@ def fetch_month(m):
     # each day is its own cursor (~60 pages of 100), fetched in parallel: the API answers in ~1 s,
     # so parallel cursors are what lets the run approach the 5,000-calls-per-5-minutes limit
     def day(d):
+        for attempt in range(3):  # a cursor that dies mid-way is restarted from the first page
+            try: return day1(d)
+            except RuntimeError as e:
+                if attempt == 2: raise
+                print(f'{d}: restarting after {str(e)[:80]}', flush=True); time.sleep(30)
+    def day1(d):
         out = []
         for it in pages('/v2/fund/daily-info/nav', {'start_nav_date': d.isoformat(), 'end_nav_date': d.isoformat()}):
             if it.get('last_val') in (None, '', 0): continue
@@ -140,7 +150,7 @@ def fetch_month(m):
     days = [dt.date(y, mm, 1) + dt.timedelta(days=i) for i in range((end - dt.date(y, mm, 1)).days + 1)]
     days = [d for d in days if d.weekday() < 5 and d <= today]
     rows = []
-    with ThreadPoolExecutor(6) as inner:
+    with ThreadPoolExecutor(4) as inner:
         for out in inner.map(day, days): rows.extend(out)
     rows.sort(key=lambda r: (r[0], r[1], r[2]))
     buf = io.StringIO(); w = csv.writer(buf); w.writerows(rows)
@@ -172,4 +182,4 @@ with ThreadPoolExecutor(4) as ex:
 left = [m for m in months() if m not in state['complete'] and m not in (cur_m, prev_m)]
 state['backfill_left'] = len(left); state['fetched_utc'] = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%MZ')
 json.dump(state, open(state_p, 'w'))
-print('done', done_now, 'months this run;', len(left), 'months still to backfill; calls', CALLS[0], flush=True)
+print('retries', dict(RETRIES)); print('done', done_now, 'months this run;', len(left), 'months still to backfill; calls', CALLS[0], flush=True)
