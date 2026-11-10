@@ -4,6 +4,10 @@ on:
   schedule:
     - cron: "47 3 * * 2-6"   # 10:47 Asia/Bangkok, Tue-Sat (after US closes)
   workflow_dispatch:
+    inputs:
+      thai_budget:
+        description: "Minutes to spend downloading Thai NAV history"
+        default: "270"
   push:
     branches: [main]
 
@@ -47,10 +51,10 @@ jobs:
       - name: Fetch Thai fund data from the SEC
         continue-on-error: true
         env:
-          SEC_API_KEY: ${{ secrets.SEC_API_KEY }}
+          SEC_API_KEY: ${{ secrets.SEC_API_KEY || secrets.INVESTORBOTFUNDNAV }}
         run: |
           mkdir -p thai-data
-          python3 -I thai/scripts/sec_fetch.py thai-data --since 2016-01-01 --budget-min 270
+          python3 -I thai/scripts/sec_fetch.py thai-data --since 2016-01-01 --budget-min ${{ github.event.inputs.thai_budget || '270' }}
       - name: Save Thai NAV history
         continue-on-error: true
         env:

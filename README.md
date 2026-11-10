@@ -46,7 +46,7 @@ This is for research and education, not investment advice.
 This page has the same charts, table, optimizers and simulator as the US page, but uses Thai mutual funds: every class, including RMF, SSF and Thai ESG.
 
 - **Data:** daily NAV and dividends since 2016, from the [SEC Thailand Open API](https://api-portal.sec.or.th). Total return reinvests each dividend on the day the NAV goes ex-dividend. Returns are in baht.
-- **Key:** set it up once by saving a free SEC Open API key as the repository secret `SEC_API_KEY`. The key needs the fund general-info, factsheet and daily-info products.
+- **Key:** set it up once by saving a free SEC Open API key as the repository secret `SEC_API_KEY` (or `InvestorBotFundNAV`). The key needs the fund general-info, factsheet and daily-info products.
 - **History:** stored on the `thai-data` branch.
   - The first run downloads about 10 years of NAV, which takes a few hours. The page fills in as it goes.
   - Later runs only fetch the latest two months.
