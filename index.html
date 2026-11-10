@@ -1,0 +1,1127 @@
+<meta charset="utf-8">
+<title>ETF Portfolio Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a single working column, like a terminal printout on paper. Controls on top, chart, table, then the optimizer. */
+:root{
+  color-scheme: light;
+  --bg:#f4f6f8; --surface:#ffffff; --sunk:#eef1f4; --ink:#0f1720; --ink-2:#46505c; --muted:#7a8490;
+  --line:#dde2e8; --line-2:#c8cfd8; --accent:#0b57a4; --accent-wash:#e6eef8;
+  --up:#0a7a3a; --down:#c23434;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#6250d6; --s8:#e34948;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-head:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45}
+.wrap{max-width:1180px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:18px}
+h1,h2{font-family:var(--f-head);font-weight:600;letter-spacing:-.01em;text-wrap:balance;margin:0}
+h1{font-size:26px}
+h2{font-size:19px}
+.sub{color:var(--ink-2);margin:2px 0 0;max-width:72ch}
+.eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px}
+.stamp{display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:12px;color:var(--ink-2)}
+.stamp i{width:7px;height:7px;border-radius:50%;background:var(--up);display:inline-block}
+.stamp i.stale{background:#d68a00}
+.fresh{display:flex;flex-direction:column;align-items:flex-end;gap:5px;min-width:0}
+.fresh-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.fresh-meta{font-size:12px;color:var(--muted);text-align:right;max-width:46ch}
+@media (max-width:600px){.fresh{align-items:flex-start}.fresh-row{justify-content:flex-start}.fresh-meta{text-align:left}}
+.stale-tag{color:#9a6400;font-weight:600}
+.proxy-tag{color:var(--accent);font-weight:600}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.panel-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn{border:1px solid var(--line-2);background:var(--surface);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500}
+.btn:hover{background:var(--sunk)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:#094a8b}
+.seg{display:inline-flex;flex-wrap:wrap;gap:2px;background:var(--sunk);border-radius:8px;padding:3px}
+.seg button{border:0;background:transparent;border-radius:6px;padding:5px 10px;font-size:13px;font-weight:500;color:var(--ink-2)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(15,23,32,.12)}
+.field{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--ink-2)}
+.field select,.field input{border:1px solid var(--line-2);border-radius:7px;padding:6px 8px;background:var(--surface);font-size:13px;color:var(--ink)}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+
+/* holdings */
+.builder{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:18px}
+@media (max-width:860px){.builder{grid-template-columns:minmax(0,1fr)}}
+.addbar{display:flex;gap:8px;flex-wrap:wrap}
+.acwrap{position:relative;flex:1 1 200px;min-width:0}
+.addbar input{width:100%;box-sizing:border-box;border:1px solid var(--line-2);border-radius:7px;padding:7px 10px;background:var(--surface)}
+.suggest{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:20;background:var(--surface);border:1px solid var(--line-2);border-radius:8px;box-shadow:0 8px 24px rgba(15,23,32,.12);padding:4px;display:flex;flex-direction:column}
+.suggest[hidden]{display:none}
+.suggest button{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:8px;align-items:center;text-align:left;border:0;background:transparent;border-radius:6px;padding:6px 8px;font-size:13px}
+.suggest button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-2)}
+.suggest button em{font-style:normal;font-family:var(--f-num);font-size:12px;color:var(--muted)}
+.suggest button:hover,.suggest button.sel{background:var(--accent-wash)}
+.loading{display:flex;align-items:center;gap:10px;color:var(--ink-2);font-size:13px}
+.hold{width:100%;border-collapse:collapse}
+.hold th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;font-weight:600;padding:4px 6px;border-bottom:1px solid var(--line)}
+.hold td{padding:6px;border-bottom:1px solid var(--line);vertical-align:middle}
+.hold tr:last-child td{border-bottom:0}
+.tick{display:inline-flex;align-items:center;gap:7px;font-weight:600}
+.sw{width:10px;height:10px;border-radius:3px;flex:none;display:inline-block}
+.fname{font-size:12px;color:var(--muted);display:block;line-height:1.25}
+.thai{font-size:11px;color:var(--accent);font-family:var(--f-num);display:block}
+.thai.none{color:var(--muted)}
+.wcell{display:flex;align-items:center;gap:4px;justify-content:flex-end}
+.wcell input{width:62px;text-align:right;border:1px solid var(--line-2);border-radius:6px;padding:4px 6px;font-family:var(--f-num);font-size:13px}
+.x{border:0;background:transparent;color:var(--muted);font-size:17px;line-height:1;padding:2px 6px;border-radius:5px}
+.x:hover{background:var(--sunk);color:var(--down)}
+.total{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:8px 6px 0;border-top:1px solid var(--line-2)}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px}
+.pill.ok{background:#e3f3ea;color:var(--up)}
+.pill.bad{background:#fbe7e7;color:var(--down)}
+.mix{display:flex;height:12px;border-radius:4px;overflow:hidden;gap:2px;background:var(--surface)}
+.mix span{display:block;height:100%}
+.side{display:flex;flex-direction:column;gap:12px}
+.check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)}
+
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+@media (max-width:900px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:480px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.kpi b{font-family:var(--f-num);font-size:20px;font-weight:500}
+.kpi small{font-size:11.5px;color:var(--muted)}
+.up{color:var(--up)} .down{color:var(--down)}
+
+/* chips */
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--c);border-radius:7px;padding:3px 9px;font-weight:600;font-size:13px;background:var(--surface)}
+.chip[aria-pressed="false"]{opacity:.45;border-style:dashed}
+.chip.port{--c:var(--ink)}
+.chartbox{position:relative;height:380px}
+@media (max-width:600px){.chartbox{height:300px}}
+.legend-note{font-size:12px;color:var(--muted)}
+
+/* tables */
+.tscroll{overflow-x:auto;min-width:0}
+table.perf{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
+.perf th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;text-align:right;padding:8px 10px;border-bottom:1px solid var(--line-2);white-space:nowrap}
+.perf th:first-child,.perf td:first-child{text-align:left;position:sticky;left:0;background:var(--surface)}
+.perf td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--f-num);white-space:nowrap}
+.perf td:first-child{font-family:var(--f-body)}
+.perf tbody tr:hover td{background:#f7f9fb}
+.perf tr.portrow td{background:var(--accent-wash);font-weight:600}
+.perf .na{color:var(--line-2)}
+.foot{font-size:12px;color:var(--muted);max-width:90ch}
+
+/* optimizer */
+.opt-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:18px}
+@media (max-width:900px){.opt-grid{grid-template-columns:minmax(0,1fr)}}
+table.wt{min-width:820px}
+.wt td .bar{display:flex;align-items:center;justify-content:flex-end;gap:6px}
+.wt td .bar i{display:block;height:6px;border-radius:2px;background:var(--accent);opacity:.75}
+.wt tr.metric td{background:var(--sunk)}
+.wt tr.metric:first-of-type td{border-top:1px solid var(--line-2)}
+.wt th .apply{display:block;margin:6px 0 0 auto;font-size:11px;padding:3px 7px;text-transform:none;letter-spacing:0}
+.wt th.cur{color:var(--ink)}
+.models{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.model{border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:12.5px;color:var(--ink-2)}
+.model b{display:block;color:var(--ink);font-size:13px;margin-bottom:2px}
+.scatterbox{position:relative;height:340px}
+.warn{background:#fff6e0;border:1px solid #f1d58c;color:#6b4a00;border-radius:8px;padding:8px 12px;font-size:12.5px}
+.scr{min-width:1080px}
+.scr th.sortable{cursor:pointer;user-select:none}
+.scr td.cat,.scr th[data-k="c"]{text-align:left}
+.scr th.sortable:hover{color:var(--ink)}
+.scr th[aria-sort="descending"]::after{content:" ↓"} .scr th[aria-sort="ascending"]::after{content:" ↑"}
+.scr th[aria-sort]{color:var(--accent)}
+.scr td.cat{font-family:var(--f-body);font-size:12px;color:var(--ink-2);max-width:170px;overflow:hidden;text-overflow:ellipsis}
+.scr td:first-child{max-width:260px;white-space:normal}
+.scr .fname{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scr .addb{font-size:12px;padding:3px 9px}
+.scr .addb[disabled]{opacity:.5;cursor:default}
+.subpanels{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:12px}
+@media (max-width:900px){.subpanels{grid-template-columns:minmax(0,1fr)}}
+.blbox{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.blbox summary{cursor:pointer;font-weight:600;font-size:13.5px}
+.blbox[open] summary{margin-bottom:8px}
+.blbox > *:not(summary){margin-top:8px}
+.views{display:flex;flex-direction:column;gap:6px}
+.view{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;background:var(--sunk);border-radius:7px;padding:6px 8px}
+.view select,.view input[type=number]{border:1px solid var(--line-2);border-radius:6px;padding:4px 6px;background:var(--surface);font-size:13px}
+.view input[type=number]{width:64px;font-family:var(--f-num)}
+.view input[type=range]{width:110px}
+.view .conf{font-family:var(--f-num);font-size:12px;min-width:34px}
+table.mini{min-width:0;font-size:12px}
+.mini td,.mini th{padding:5px 8px}
+.sim{display:flex;flex-direction:column;gap:10px;min-width:0}
+.sim h3{font-family:var(--f-head);font-size:16px;font-weight:600;margin:0}
+.simrow{display:grid;grid-template-columns:132px minmax(0,1fr) 64px 64px;gap:8px;align-items:center;font-size:12.5px}
+.simrow.head{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.simrow .stack{display:flex;height:14px;border-radius:3px;overflow:hidden;gap:1px;background:var(--surface)}
+.simrow .stack span{display:block;height:100%}
+.simrow .n{font-family:var(--f-num);text-align:right}
+.simrow .hi{color:var(--down);font-weight:600}
+@media (max-width:480px){.simrow{grid-template-columns:96px minmax(0,1fr) 52px 52px}}
+table.cmp{min-width:860px}
+.cmp td{white-space:normal;text-align:left;font-family:var(--f-body);font-size:12.5px;vertical-align:top}
+.cmp th{text-align:left}
+.cmp td:first-child{font-weight:600;white-space:nowrap}
+.tag{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11.5px;font-weight:600}
+.tag.vh{background:#e3f3ea;color:var(--up)} .tag.h{background:#eaf2fb;color:var(--accent)} .tag.m{background:#fff3db;color:#8a5a00} .tag.l{background:#fbe7e7;color:var(--down)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Total return · dividends reinvested</div>
+      <h1 id="title">Portfolio vs. ETFs</h1>
+      <p class="sub">Pick any of the <span id="etfCount">5,700+</span> US-listed ETFs, set weights, and compare each fund with the whole portfolio. The optimizer below re-weights the same funds with seven standard allocation models.</p>
+    </div>
+    <div class="fresh" aria-live="polite">
+      <div class="fresh-row"><span class="stamp"><i id="stampDot"></i><span id="stamp">Loading ETF data…</span></span>
+        <button class="btn" type="button" id="refreshBtn" disabled>Refresh data</button></div>
+      <span class="fresh-meta" id="freshMeta"></span>
+    </div>
+  </header>
+
+  <section class="panel" aria-labelledby="h-build">
+    <div class="panel-head">
+      <h2 id="h-build">Portfolio</h2>
+      <div class="row">
+        <button class="btn" id="resetBtn" type="button">Reset to example portfolio</button>
+      </div>
+    </div>
+    <div class="builder">
+      <div style="min-width:0;display:flex;flex-direction:column;gap:10px">
+        <form class="addbar" id="addForm">
+          <div class="acwrap"><input id="addInput" placeholder="Add any US ETF by ticker or name" autocomplete="off" aria-label="Add an ETF" role="combobox" aria-controls="suggest">
+          <div class="suggest" id="suggest" role="listbox" hidden></div></div>
+          <button class="btn primary" type="submit">Add</button>
+        </form>
+        <div class="tscroll">
+          <table class="hold">
+            <thead><tr><th>Fund</th><th style="text-align:right">Weight</th><th></th></tr></thead>
+            <tbody id="holdBody"></tbody>
+          </table>
+        </div>
+        <div class="total"><span>Total <span id="totalPill"></span></span><span class="num" id="totalVal"></span></div>
+        <div class="mix" id="mix" aria-hidden="true"></div>
+      </div>
+      <div class="side">
+        <label class="field">Rebalancing
+          <select id="rebal">
+            <option value="M">Monthly</option>
+            <option value="Q">Quarterly</option>
+            <option value="Y">Yearly</option>
+            <option value="N">Never (buy and hold)</option>
+          </select>
+        </label>
+        <label class="field">Optionality / cash sleeve earns
+          <select id="cashEarn">
+            <option value="BIL">T-bill rate (BIL)</option>
+            <option value="CASH">Nothing (0%)</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="thaiToggle" checked> Show Thai feeder fund codes</label>
+        <p class="foot" style="margin:0">Up to 8 funds at a time; browse all ETFs in the table further down. A fund with 0% weight is still charted and tabled, so you can compare it without holding it. The portfolio line starts when every held fund has data.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="kpis" id="kpis" aria-label="Portfolio summary"></section>
+
+  <section class="panel" aria-labelledby="h-chart">
+    <div class="panel-head">
+      <h2 id="h-chart">Performance</h2>
+      <div class="seg" id="metricSeg" role="group" aria-label="Chart measure">
+        <button type="button" data-v="tr" aria-pressed="true">Total return (%)</button>
+        <button type="button" data-v="dd" aria-pressed="false">Drawdown (%)</button>
+      </div>
+    </div>
+    <div class="seg" id="rangeSeg" role="group" aria-label="Time range"></div>
+    <div class="chips" id="chips"></div>
+    <div class="chartbox"><canvas id="chart" aria-label="Total return chart"></canvas></div>
+    <div class="legend-note" id="chartNote"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-perf">
+    <div class="panel-head">
+      <h2 id="h-perf">Comparison</h2>
+      <div class="seg" id="annSeg" role="group" aria-label="Return format">
+        <button type="button" data-v="0" aria-pressed="true">Cumulative</button>
+        <button type="button" data-v="1" aria-pressed="false">Annualized</button>
+      </div>
+    </div>
+    <div class="tscroll"><table class="perf" id="perf"></table></div>
+    <p class="foot" id="perfNote"></p>
+  </section>
+
+  <section class="panel" aria-labelledby="h-scr">
+    <div class="panel-head">
+      <div>
+        <h2 id="h-scr">All US ETFs</h2>
+        <p class="sub" style="font-size:13px" id="scrSub">Every US-listed ETF in the dataset. Sort by any column and add a fund to your comparison with one click.</p>
+      </div>
+    </div>
+    <div class="row">
+      <label class="field" style="flex:1 1 200px">Search
+        <input id="scrQ" type="search" placeholder="Ticker or name, e.g. dividend, gold, IVV">
+      </label>
+      <label class="field">Category
+        <select id="scrCat"><option value="">All categories</option></select>
+      </label>
+      <label class="field">Fund size
+        <select id="scrAum"><option value="0">Any size</option><option value="1e8" selected>Over $100M</option><option value="1e9">Over $1B</option><option value="1e10">Over $10B</option></select>
+      </label>
+      <label class="check" style="padding-bottom:6px"><input type="checkbox" id="scrLev" checked> Hide leveraged and inverse</label>
+    </div>
+    <div class="tscroll"><table class="perf scr" id="scr"></table></div>
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <span class="foot" id="scrCount"></span>
+      <button class="btn" type="button" id="scrMore">Show 50 more</button>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-opt">
+    <div class="panel-head">
+      <div>
+        <h2 id="h-opt">Optimizer</h2>
+        <p class="sub" style="font-size:13px">Re-weights the funds you selected with nine allocation models. The optionality sleeve stays fixed at its current weight, and "Apply" scales a model into the rest.</p>
+      </div>
+    </div>
+    <div class="row">
+      <label class="field">Lookback
+        <select id="lookback"><option value="3">3 years</option><option value="5" selected>5 years</option><option value="10">10 years</option><option value="0">Longest common history</option></select>
+      </label>
+      <label class="field">Max weight per fund
+        <select id="cap"><option value="1">No cap</option><option value="0.5">50%</option><option value="0.4" selected>40%</option><option value="0.3">30%</option><option value="0.25">25%</option></select>
+      </label>
+      <label class="field">Covariance
+        <select id="covMode"><option value="lwcc" selected>Ledoit-Wolf, constant correlation</option><option value="lw">Ledoit-Wolf, identity target</option><option value="sample">Sample (no shrinkage)</option></select>
+      </label>
+      <label class="field">Risk-free rate (% / yr)
+        <input id="rf" type="number" step="0.1" min="0" max="15" style="width:90px">
+      </label>
+      <label class="check" style="padding-bottom:6px"><input type="checkbox" id="fixCash" checked> Keep T-bill funds (SGOV, BIL, SHV) at their current weight</label>
+    </div>
+    <div class="subpanels">
+      <details class="blbox" id="blBox" open>
+        <summary>Black-Litterman: starting point and your views</summary>
+        <div class="row">
+          <label class="field">Neutral starting weights
+            <select id="blPrior"><option value="cur" selected>Your current weights</option><option value="aum">Fund size (assets under management)</option><option value="ew">Equal weight</option></select>
+          </label>
+          <label class="field">Risk aversion δ
+            <input id="blDelta" type="number" step="0.5" min="0.5" max="10" value="2.5" style="width:80px">
+          </label>
+        </div>
+        <div id="viewList" class="views"></div>
+        <div class="row"><button class="btn" type="button" id="addView">Add a view</button></div>
+        <div class="tscroll"><table class="perf mini" id="blTable"></table></div>
+        <p class="foot" id="blNote"></p>
+      </details>
+      <details class="blbox" id="cvBox" open>
+        <summary>Mean-CVaR: tail-risk settings</summary>
+        <div class="row">
+          <label class="field">Tail measured
+            <select id="cvAlpha"><option value="0.95" selected>Worst 5% of days (CVaR 95%)</option><option value="0.99">Worst 1% of days (CVaR 99%)</option></select>
+          </label>
+          <label class="field">Return target
+            <select id="cvTarget"><option value="cur" selected>At least your current portfolio's return</option><option value="min">None (lowest tail loss)</option></select>
+          </label>
+        </div>
+        <p class="foot">Uses the actual daily returns in the lookback window as scenarios, so fat tails and crash days count as they happened. It minimizes the average loss on the worst days (Rockafellar and Uryasev 2000).</p>
+      </details>
+    </div>
+    <div id="optWarn"></div>
+    <div class="tscroll"><table class="perf wt" id="wtTable"></table></div>
+    <div class="opt-grid">
+      <div style="min-width:0;display:flex;flex-direction:column;gap:8px">
+        <div class="eyebrow">Risk vs. return in the lookback window</div>
+        <div class="scatterbox"><canvas id="scatter" aria-label="Risk return scatter"></canvas></div>
+      </div>
+      <div class="sim" aria-labelledby="h-sim">
+        <div>
+          <h3 id="h-sim">Robustness simulator</h3>
+          <p class="sub" style="font-size:13px">Adds random errors to the return estimates and pushes correlations toward 1, as in a market panic, then re-runs each model 20 times on your funds. Models that swing a lot here tend to disappoint out of sample.</p>
+        </div>
+        <div class="row">
+          <label class="field" style="flex:1 1 180px">Return estimation noise: <b id="simNoiseV" class="num"></b>
+            <input type="range" id="simNoise" min="0" max="10" step="0.5" value="3">
+          </label>
+          <label class="field" style="flex:1 1 180px">Market stress (correlation spike): <b id="simStressV" class="num"></b>
+            <input type="range" id="simStress" min="0" max="90" step="5" value="0">
+          </label>
+        </div>
+        <div id="simOut"></div>
+      </div>
+    </div>
+    <div>
+      <div class="eyebrow" style="margin-bottom:6px">How the models compare</div>
+      <div class="tscroll"><table class="perf cmp" id="cmpTable"></table></div>
+    </div>
+    <p class="foot" id="optNote"></p>
+  </section>
+
+  <p class="foot">Data: daily closes and dividends for every US-listed ETF in a public GitHub archive that mirrors Yahoo Finance (over 5,700 funds; names, categories, fees, assets and yields from the same archive's fund metadata). Total return is rebuilt by reinvesting each dividend on its ex-date, back to 1993 where a fund is that old. Checked against the YTD, 10Y and 20Y returns in your screenshot (within 0.05 points). A scheduled task rebuilds the dataset after each US trading day, and the Refresh button starts a rebuild on demand. Very recent dividends can be missing for a few weeks. VHYA (Vanguard FTSE All-World High Dividend Yield UCITS, USD Accumulating, London) is not in the US data source, so it is shown as a proxy: 38.5% VYM (FTSE US High Dividend Yield) plus 61.5% VYMI (FTSE All-World ex-US High Dividend Yield), its index's two halves at the fund's 30 Sep 2026 US weight, rebalanced monthly, minus VHYA's 0.16% higher fee. Against VHYA's Xetra listing (converted to USD) from 2021 to Feb 2026, weekly returns correlated 0.93 and the proxy ran about 1 point a year ahead. Thai feeder codes come from the "Map example portfolio to Thai feeder funds" note in this project; SMH maps to a UCITS semiconductor fund, and no Thai feeder was found for VDC. Not investment advice: optimizer results are fit to past data and change with the lookback.</p>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+"use strict";
+const D = {t:{}, meta:{}, list:[], built:'', src:''}; let DATES=[], N=0, TS=[], ASOF=''; const SHARD={};
+async function loadIndex(opts){
+  const r=await fetch('etfs.json', opts||{}); if(!r.ok) throw new Error('index '+r.status); const j=await r.json();
+  DATES=j.dates; N=DATES.length; TS=DATES.map(d=>Date.parse(d+'T00:00:00Z')); ASOF=j.asof; D.built=j.built; D.src=j.src_updated;
+  j.etfs.forEach(row=>{ const o={}; j.cols.forEach((c,i)=>{ o[c]=row[i]; }); D.meta[o.t]=o; D.list.push(o); });
+}
+async function ensure(list){
+  const need=[...new Set(list.filter(t=>t!=='CASH' && !D.t[t] && D.meta[t]).map(t=>D.meta[t].k))];
+  await Promise.all(need.map(async k=>{
+    if(!SHARD[k]) SHARD[k]=fetch('d/'+k+'.json').then(r=>{ if(!r.ok) throw new Error('shard '+k); return r.json(); });
+    const sh=await SHARD[k];
+    for(const t in sh){ if(D.t[t]) continue; const m=D.meta[t]; const parts=sh[t].d.split(','); const v=new Float64Array(parts.length); let L=0;
+      for(let i=0;i<parts.length;i++){ L+=+parts[i]; v[i]=100*Math.exp(L/1e4); }
+      D.t[t]={s:sh[t].s, v, n:m.n, px:m.px, last:DATES[m.e]}; }
+  }));
+}
+const SLOTS = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#6250d6','#e34948'];
+const INK = '#0f1720';
+const THAI = {VT:'TLWORLD-X', QQQ:'TLUSNDQ-H · TNASDAQ', SMH:'TLSEMICON · SCBSEMI (UCITS twin)', XLV:'TUSHEALTH-A', SCHD:'TLUSHD-H', SGOV:'TLUSGOV', VDC:null};
+const EXAMPLE = {holdings:[['VT',40],['QQQ',5],['SMH',5],['VDC',10],['XLV',10],['SCHD',10],['SGOV',15]], opt:5};
+const MAXN = 8;
+const fmtDate = d => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'});
+
+/* ---------- state ---------- */
+let S;
+function freshState(){ return {holdings: EXAMPLE.holdings.map(([t,w],i)=>({t,w,slot:i,on:true})), opt:EXAMPLE.opt, rebal:'M', cash:'BIL', thai:true, range:'1Y', metric:'tr', ann:false, portOn:true, views:[]}; }
+function loadState(){ try { const raw = localStorage.getItem('etfLab.v1'); S = raw ? JSON.parse(raw) : freshState(); if(!S.holdings || !S.holdings.every(h=>D.meta[h.t])) S = freshState(); } catch(e){ S = freshState(); } }
+function save(){ try{ localStorage.setItem('etfLab.v1', JSON.stringify(S)); }catch(e){} }
+
+/* ---------- data helpers ---------- */
+function rng(t){ const s = D.t[t]; return [s.s, s.s + s.v.length - 1]; }
+function val(t,i){ if(t==='CASH') return 100; const s=D.t[t], k=i-s.s; return (k>=0 && k<s.v.length) ? s.v[k] : null; }
+function idxOnOrBefore(dateStr){ let lo=0, hi=N-1, r=-1; while(lo<=hi){ const m=(lo+hi)>>1; if(DATES[m]<=dateStr){ r=m; lo=m+1; } else hi=m-1; } return r; }
+function shiftDate(dateStr, months){ const [y,m,d] = dateStr.split('-').map(Number); const t = new Date(Date.UTC(y, m-1+months, 1)); const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth()+1, 0)).getUTCDate(); t.setUTCDate(Math.min(d,last)); return t.toISOString().slice(0,10); }
+function periodKey(dateStr, mode){ const y=dateStr.slice(0,4), m=+dateStr.slice(5,7); if(mode==='M') return y+m; if(mode==='Q') return y+Math.floor((m-1)/3); if(mode==='Y') return y; return ''; }
+
+/* Portfolio simulation: weights {ticker: w} summing to 1, from index a to b. Returns Float64Array of index values (start 100). */
+function simulate(wts, a, b, mode){
+  const keys = Object.keys(wts).filter(k=>wts[k]>0);
+  const w = keys.map(k=>wts[k]);
+  let h = w.slice(); const out = new Float64Array(b-a+1); out[0]=100;
+  for(let i=a+1;i<=b;i++){
+    let V=0;
+    for(let j=0;j<keys.length;j++){ const k=keys[j]; if(k!=='CASH'){ const p0=val(k,i-1), p1=val(k,i); h[j]*= p1/p0; } V+=h[j]; }
+    out[i-a]=100*V;
+    if(mode!=='N' && i<b && periodKey(DATES[i],mode)!==periodKey(DATES[i+1],mode)) h = w.map(x=>x*V);
+  }
+  return out;
+}
+
+function portfolioWeights(){
+  const wts = {}; let tot=0;
+  S.holdings.forEach(h=>{ if(h.w>0){ wts[h.t]=(wts[h.t]||0)+h.w; tot+=h.w; } });
+  if(S.opt>0){ const k = S.cash==='BIL' ? 'BIL' : 'CASH'; wts[k]=(wts[k]||0)+S.opt; tot+=S.opt; }
+  if(tot<=0) return null;
+  for(const k in wts) wts[k]/=tot;
+  return {wts, tot};
+}
+function commonRange(tickers){
+  let a=0, b=N-1;
+  tickers.forEach(t=>{ if(t==='CASH') return; const [s,e]=rng(t); a=Math.max(a,s); b=Math.min(b,e); });
+  return [a,b];
+}
+let PORT = null; // {a,b,v}
+function computePortfolio(){
+  const pw = portfolioWeights(); if(!pw){ PORT=null; return; }
+  const [a,b] = commonRange(Object.keys(pw.wts));
+  PORT = (b>a) ? {a,b,v:simulate(pw.wts,a,b,S.rebal), wts:pw.wts} : null;
+}
+function seriesOf(key){ // returns {a,b,get(i)}
+  if(key==='PORT') return PORT ? {a:PORT.a,b:PORT.b,get:i=>PORT.v[i-PORT.a]} : null;
+  const [a,b]=rng(key); return {a,b,get:i=>val(key,i)};
+}
+function retBetween(s, endIdx, startDate){
+  const i0 = idxOnOrBefore(startDate); if(i0<s.a) return null;
+  return s.get(endIdx)/s.get(i0)-1;
+}
+function dailyRets(s, a, b){ const r=[]; for(let i=Math.max(a,s.a)+1;i<=Math.min(b,s.b);i++) r.push(s.get(i)/s.get(i-1)-1); return r; }
+function stdev(x){ const n=x.length; if(n<2) return null; let m=0; for(const v of x) m+=v; m/=n; let q=0; for(const v of x) q+=(v-m)*(v-m); return Math.sqrt(q/(n-1)); }
+function maxDD(s, a, b){ let pk=-Infinity, dd=0; for(let i=Math.max(a,s.a);i<=Math.min(b,s.b);i++){ const v=s.get(i); if(v>pk) pk=v; dd=Math.min(dd, v/pk-1); } return dd; }
+function cagr(s,a,b){ a=Math.max(a,s.a); b=Math.min(b,s.b); const yrs=(TS[b]-TS[a])/(365.25*864e5); return yrs>0 ? Math.pow(s.get(b)/s.get(a),1/yrs)-1 : null; }
+
+/* ---------- formatting ---------- */
+const pct = (x,d=2,sign=true) => x==null||!isFinite(x) ? '–' : (sign && x>0?'+':'') + (x*100).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}) + '%';
+const cls = x => x==null ? 'na' : x>0 ? 'up' : x<0 ? 'down' : '';
+function toast(msg){ const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('on'); clearTimeout(toast.t); toast.t=setTimeout(()=>el.classList.remove('on'),2200); }
+
+/* ---------- holdings UI ---------- */
+function searchETFs(q, lim){
+  q=q.trim().toUpperCase(); if(!q) return [];
+  const a=[], b=[];
+  for(const m of D.list){ if(m.t===q) a.unshift(m); else if(m.t.startsWith(q)) a.push(m); else if(q.length>1 && (m.n||'').toUpperCase().includes(q)) b.push(m); }
+  const byAum=(x,y)=>(y.aum||0)-(x.aum||0);
+  const ex=a[0]&&a[0].t===q?[a.shift()]:[];
+  return [...ex, ...a.sort(byAum), ...b.sort(byAum)].slice(0,lim);
+}
+const fmtAum = x => x==null ? '–' : x>=1e9 ? '$'+(x/1e9).toFixed(x>=1e10?0:1)+'B' : x>=1e6 ? '$'+(x/1e6).toFixed(0)+'M' : '$'+(x/1e3).toFixed(0)+'K';
+const sug=document.getElementById('suggest'), addInp=document.getElementById('addInput');
+let sugSel=-1;
+function renderSuggest(){
+  const res=searchETFs(addInp.value,8); sugSel=-1;
+  if(!res.length){ sug.hidden=true; sug.innerHTML=''; return; }
+  sug.innerHTML=res.map((m,i)=>`<button type="button" role="option" data-t="${m.t}" id="sug-${i}"><b>${m.t}</b><span>${m.n}</span><em>${fmtAum(m.aum)}</em></button>`).join('');
+  sug.hidden=false;
+  sug.querySelectorAll('button').forEach(b=>b.addEventListener('mousedown',e=>{ e.preventDefault(); addTicker(b.dataset.t); }));
+}
+addInp.addEventListener('input',renderSuggest);
+addInp.addEventListener('blur',()=>setTimeout(()=>{ sug.hidden=true; },100));
+addInp.addEventListener('keydown',e=>{
+  const bs=[...sug.querySelectorAll('button')]; if(sug.hidden||!bs.length) return;
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){ e.preventDefault(); sugSel=(sugSel+(e.key==='ArrowDown'?1:-1)+bs.length)%bs.length; bs.forEach((b,i)=>b.classList.toggle('sel',i===sugSel)); }
+  else if(e.key==='Enter' && sugSel>=0){ e.preventDefault(); addTicker(bs[sugSel].dataset.t); }
+  else if(e.key==='Escape'){ sug.hidden=true; }
+});
+function colorOf(t){ const h=S.holdings.find(x=>x.t===t); return h ? SLOTS[h.slot] : '#999'; }
+function thaiLine(t){ if(!S.thai) return ''; if(t in THAI){ return THAI[t] ? `<span class="thai">${THAI[t]}</span>` : `<span class="thai none">No Thai feeder found</span>`; } return ''; }
+function renderHoldings(){
+  const tb = document.getElementById('holdBody'); tb.innerHTML='';
+  S.holdings.forEach((h,ix)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td><span class="tick"><span class="sw" style="background:${SLOTS[h.slot]}"></span>${h.t}</span><span class="fname">${D.t[h.t].n}</span><span class="fname">${lastCloseNote(h.t)}</span>${thaiLine(h.t)}</td>
+      <td><div class="wcell"><input id="w-${h.t}" type="number" min="0" max="100" step="0.5" value="${h.w}" aria-label="${h.t} weight in percent"><span>%</span></div></td>
+      <td style="width:28px"><button class="x" type="button" aria-label="Remove ${h.t}">×</button></td>`;
+    tr.querySelector('input').addEventListener('change', e=>{ h.w=Math.max(0,Math.min(100,+e.target.value||0)); e.target.value=h.w; update(); });
+    tr.querySelector('.x').addEventListener('click', ()=>{ S.holdings.splice(ix,1); update(true); });
+    tb.appendChild(tr);
+  });
+  const tr=document.createElement('tr');
+  tr.innerHTML = `<td><span class="tick"><span class="sw" style="background:repeating-linear-gradient(45deg,#c8cfd8 0 2px,#fff 2px 4px);border:1px solid #c8cfd8"></span>Optionality</span><span class="fname">Cash kept for opportunities · ${S.cash==='BIL'?'earns T-bill rate':'earns 0%'}</span></td>
+    <td><div class="wcell"><input id="w-opt" type="number" min="0" max="100" step="0.5" value="${S.opt}" aria-label="Optionality weight in percent"><span>%</span></div></td><td></td>`;
+  tr.querySelector('input').addEventListener('change', e=>{ S.opt=Math.max(0,Math.min(100,+e.target.value||0)); e.target.value=S.opt; update(); });
+  tb.appendChild(tr);
+  const tot = S.holdings.reduce((s,h)=>s+h.w,0)+S.opt;
+  document.getElementById('totalVal').textContent = tot.toFixed(1)+'%';
+  const ok = Math.abs(tot-100)<0.01;
+  document.getElementById('totalPill').innerHTML = ok ? '<span class="pill ok">✓ Sums to 100%</span>' : `<span class="pill bad">! Off by ${(tot-100).toFixed(1)} pts, scaled to 100%</span>`;
+  const mix=document.getElementById('mix'); mix.innerHTML='';
+  S.holdings.forEach(h=>{ if(h.w>0){ const s=document.createElement('span'); s.style.flex=h.w; s.style.background=SLOTS[h.slot]; s.title=`${h.t} ${h.w}%`; mix.appendChild(s);} });
+  if(S.opt>0){ const s=document.createElement('span'); s.style.flex=S.opt; s.style.background='repeating-linear-gradient(45deg,#c8cfd8 0 2px,#fff 2px 4px)'; mix.appendChild(s); }
+  document.getElementById('rebal').value=S.rebal; document.getElementById('cashEarn').value=S.cash; document.getElementById('thaiToggle').checked=S.thai;
+  const held = S.holdings.filter(h=>h.w>0).map(h=>h.t);
+  document.getElementById('title').textContent = S.holdings.map(h=>h.t).join(' vs. ') || 'Pick some ETFs';
+}
+async function addTicker(t){
+  t=(t||'').trim().toUpperCase(); if(!t) return;
+  if(!D.meta[t]){ const r=searchETFs(t,1); if(r.length) t=r[0].t; else { toast(`No US ETF matches "${t}".`); return; } }
+  if(S.holdings.some(h=>h.t===t)){ toast(`${t} is already selected.`); return; }
+  if(S.holdings.length>=MAXN){ toast('Up to 8 funds. Remove one first.'); return; }
+  const used = new Set(S.holdings.map(h=>h.slot)); let slot=0; while(used.has(slot)) slot++;
+  addInp.value=''; sug.hidden=true;
+  try{ await ensure([t]); }catch(e){ toast(`Could not load ${t}. Try again.`); return; }
+  S.holdings.push({t,w:0,slot,on:true}); toast(`Added ${t} at 0%. Set a weight to hold it.`); update(true);
+}
+document.getElementById('addForm').addEventListener('submit', e=>{ e.preventDefault(); addTicker(addInp.value); });
+document.getElementById('resetBtn').addEventListener('click', ()=>{ const keep={range:S.range,metric:S.metric,thai:S.thai}; S=freshState(); Object.assign(S,keep); update(true); toast('Reset to the example portfolio'); });
+document.getElementById('rebal').addEventListener('change', e=>{ S.rebal=e.target.value; update(); });
+document.getElementById('cashEarn').addEventListener('change', e=>{ S.cash=e.target.value; update(); });
+document.getElementById('thaiToggle').addEventListener('change', e=>{ S.thai=e.target.checked; update(); });
+
+/* ---------- KPIs ---------- */
+function bilRate(endIdx){ const s=seriesOf('BIL'); const r=retBetween(s, Math.min(endIdx,s.b), shiftDate(DATES[Math.min(endIdx,s.b)],-12)); return r; }
+function renderKPIs(){
+  const el=document.getElementById('kpis');
+  if(!PORT){ el.innerHTML='<div class="kpi"><small>Set at least one weight above 0% to build a portfolio.</small></div>'; return; }
+  const s=seriesOf('PORT'), b=PORT.b, end=DATES[b];
+  const ytd = retBetween(s,b,(+end.slice(0,4)-1)+'-12-31');
+  const y1 = retBetween(s,b,shiftDate(end,-12));
+  const a3 = idxOnOrBefore(shiftDate(end,-36));
+  const vol = stdev(dailyRets(s, Math.max(a3,s.a), b))*Math.sqrt(252);
+  const c5 = a3>=s.a ? cagr(s, idxOnOrBefore(shiftDate(end,-60)), b) : null;
+  const rf = bilRate(b) ?? 0;
+  const r3 = cagr(s, Math.max(a3,s.a), b);
+  const sh = vol ? (r3-rf)/vol : null;
+  const dd = maxDD(s, s.a, b);
+  const sinceYears = ((TS[b]-TS[s.a])/(365.25*864e5)).toFixed(1);
+  const k = [
+    ['YTD', pct(ytd), cls(ytd), `as of ${fmtDate(end)}`],
+    ['1 year', pct(y1), cls(y1), 'total return'],
+    ['5Y annualized', pct(idxOnOrBefore(shiftDate(end,-60))>=s.a?c5:null), cls(c5), 'CAGR'],
+    ['Volatility', pct(vol,1,false), '', '3Y, annualized'],
+    ['Sharpe ratio', sh==null?'–':sh.toFixed(2), '', `3Y, vs T-bill ${pct(rf,1,false)}`],
+    ['Max drawdown', pct(dd,1), 'down', `over ${sinceYears} yrs of history`]
+  ];
+  el.innerHTML = k.map(([l,v,c,n])=>`<div class="kpi"><span class="eyebrow">${l}</span><b class="${c}">${v}</b><small>${n}</small></div>`).join('');
+}
+
+/* ---------- chart ---------- */
+const RANGES = [['1D',0],['5D',0],['1M',1],['3M',3],['6M',6],['YTD',0],['1Y',12],['3Y',36],['5Y',60],['10Y',120],['MAX',0],['ALL',0]];
+const rangeSeg = document.getElementById('rangeSeg');
+RANGES.forEach(([r])=>{ const b=document.createElement('button'); b.type='button'; b.textContent=r; b.dataset.v=r; b.addEventListener('click',()=>{ S.range=r; update(); }); rangeSeg.appendChild(b); });
+document.querySelectorAll('#metricSeg button').forEach(b=>b.addEventListener('click',()=>{ S.metric=b.dataset.v; update(); }));
+document.querySelectorAll('#annSeg button').forEach(b=>b.addEventListener('click',()=>{ S.ann=b.dataset.v==='1'; update(); }));
+
+function chartEndIdx(){ const ks=S.holdings.map(h=>h.t); let b=0; ks.forEach(t=>{ b=Math.max(b,rng(t)[1]); }); if(PORT) b=Math.max(b,PORT.b); return b||N-1; }
+function rangeStart(end){
+  const r=S.range, e=DATES[end];
+  if(r==='1D') return end-1; if(r==='5D') return end-5;
+  if(r==='YTD') return idxOnOrBefore((+e.slice(0,4)-1)+'-12-31');
+  if(r==='MAX') return PORT ? PORT.a : commonRange(S.holdings.map(h=>h.t))[0];
+  if(r==='ALL') return Math.min(...S.holdings.map(h=>rng(h.t)[0]), PORT?PORT.a:N-1);
+  const m=RANGES.find(x=>x[0]===r)[1]; return Math.max(0, idxOnOrBefore(shiftDate(e,-m)));
+}
+let chart;
+function buildChart(){
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  Chart.defaults.color = '#46505c';
+  chart = new Chart(document.getElementById('chart'), {
+    type:'line', data:{datasets:[]},
+    options:{
+      animation:false, parsing:false, normalized:true, responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index', intersect:false, axis:'x'},
+      plugins:{
+        legend:{display:false},
+        decimation:{enabled:true, algorithm:'lttb', samples:700},
+        tooltip:{
+          backgroundColor:'#ffffff', titleColor:'#0f1720', bodyColor:'#0f1720', borderColor:'#c8cfd8', borderWidth:1, padding:10,
+          bodyFont:{family:'"IBM Plex Mono", ui-monospace, monospace', size:12}, titleFont:{weight:'600'}, boxPadding:4, usePointStyle:false,
+          itemSort:(a,b)=>b.parsed.y-a.parsed.y,
+          callbacks:{
+            title:items=> items.length ? new Date(items[0].parsed.x).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}) : '',
+            label:c=> ` ${c.dataset.label.padEnd(9)} ${(c.parsed.y>0?'+':'')+c.parsed.y.toFixed(2)}%`
+          }
+        }
+      },
+      scales:{
+        x:{type:'linear', grid:{display:false}, border:{color:'#c8cfd8'},
+           ticks:{maxRotation:0, autoSkipPadding:24, callback:function(v){ const d=new Date(v); const span=this.max-this.min; return d.toLocaleDateString('en-US', span>3*365*864e5?{year:'numeric',timeZone:'UTC'}:span>40*864e5?{month:'short',year:'2-digit',timeZone:'UTC'}:{month:'short',day:'numeric',timeZone:'UTC'}); }}},
+        y:{position:'right', grid:{color:'#e9edf1'}, border:{display:false}, ticks:{callback:v=>(v>0?'+':'')+v+'%'}}
+      }
+    }
+  });
+}
+function renderChips(){
+  const box=document.getElementById('chips'); box.innerHTML='';
+  const mk=(label,color,on,fn,extra='')=>{ const b=document.createElement('button'); b.type='button'; b.className='chip '+extra; b.style.setProperty('--c',color); b.setAttribute('aria-pressed',on); b.innerHTML=`<span class="sw" style="background:${color}"></span>${label}`; b.addEventListener('click',fn); box.appendChild(b); };
+  if(PORT) mk('Portfolio', INK, S.portOn, ()=>{ S.portOn=!S.portOn; update(); }, 'port');
+  S.holdings.forEach(h=> mk(h.t, SLOTS[h.slot], h.on!==false, ()=>{ h.on = h.on===false; update(); }));
+}
+function renderChart(){
+  document.querySelectorAll('#rangeSeg button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.v===S.range));
+  document.querySelectorAll('#metricSeg button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.v===S.metric));
+  const end=chartEndIdx(), a=rangeStart(end);
+  const sets=[];
+  const add=(key,label,color,width)=>{
+    const s=seriesOf(key); if(!s) return;
+    const lo=Math.max(a,s.a), hi=Math.min(end,s.b); if(hi<=lo) return;
+    const base=s.get(lo); let pk=-Infinity; const data=[];
+    for(let i=lo;i<=hi;i++){ const v=s.get(i); let y; if(S.metric==='dd'){ pk=Math.max(pk,v); y=(v/pk-1)*100; } else y=(v/base-1)*100; data.push({x:TS[i],y}); }
+    sets.push({label, data, borderColor:color, backgroundColor:color, borderWidth:width, pointRadius:0, pointHoverRadius:4, pointHoverBorderWidth:2, pointHoverBorderColor:'#fff', tension:0, order: key==='PORT'?0:1});
+  };
+  S.holdings.forEach(h=>{ if(h.on!==false) add(h.t,h.t,SLOTS[h.slot],1.6); });
+  if(S.portOn && PORT) add('PORT','Portfolio',INK,2.8);
+  chart.data.datasets=sets;
+  chart.options.scales.x.min = TS[a]; chart.options.scales.x.max = TS[end];
+  chart.update('none');
+  const late = S.holdings.filter(h=>rng(h.t)[0]>a).map(h=>`${h.t} from ${fmtDate(DATES[rng(h.t)[0]])}`);
+  document.getElementById('chartNote').textContent = `${fmtDate(DATES[a])} to ${fmtDate(DATES[end])}. ` + (late.length? `Starts later: ${late.join(', ')}. ` : '') + 'Tap a chip to hide or show a line.';
+}
+
+/* ---------- performance table ---------- */
+const PERIODS = [['1M',1],['3M',3],['6M',6],['YTD','ytd'],['1Y',12],['3Y',36],['5Y',60],['10Y',120],['20Y',240]];
+function renderPerf(){
+  const rows=[]; if(PORT) rows.push(['PORT','Portfolio']); S.holdings.forEach(h=>rows.push([h.t,h.t]));
+  const END=Math.min(...rows.map(([k])=>seriesOf(k).b));
+  let html='<thead><tr><th>Symbol</th>'+PERIODS.map(p=>`<th>${p[0]}</th>`).join('')+'<th>Vol 3Y</th><th>Max DD</th><th>Price</th></tr></thead><tbody>';
+  rows.forEach(([k,label])=>{
+    const s=seriesOf(k); const b=END, e=DATES[b];
+    const cells = PERIODS.map(([p,m])=>{
+      let r = m==='ytd' ? retBetween(s,b,(+e.slice(0,4)-1)+'-12-31') : retBetween(s,b,shiftDate(e,-m));
+      if(r!=null && S.ann && typeof m==='number' && m>12) r = Math.pow(1+r,12/m)-1;
+      return `<td class="${cls(r)}">${pct(r)}</td>`;
+    }).join('');
+    const a3=Math.max(idxOnOrBefore(shiftDate(e,-36)),s.a);
+    const vol=stdev(dailyRets(s,a3,b))*Math.sqrt(252);
+    const dd=maxDD(s,s.a,b);
+    const sw = k==='PORT' ? INK : colorOf(k);
+    const name = k==='PORT' ? '<span class="fname">Your weights</span>' : `<span class="fname">${D.t[k].n}</span>${D.meta[k]&&D.meta[k].proxy?`<span class="fname">${proxyNote(k)}</span>`:''}`;
+    const px = k==='PORT' || D.t[k].px==null ? '–' : '$'+D.t[k].px.toFixed(2);
+    rows.length && (html += `<tr class="${k==='PORT'?'portrow':''}"><td><span class="tick"><span class="sw" style="background:${sw}"></span>${label}</span>${name}</td>${cells}<td>${pct(vol,1,false)}</td><td class="down">${pct(dd,1)}</td><td>${px}</td></tr>`);
+  });
+  html+='</tbody>';
+  document.getElementById('perf').innerHTML=html;
+  document.querySelectorAll('#annSeg button').forEach(b=>b.setAttribute('aria-pressed', (b.dataset.v==='1')===S.ann));
+  document.getElementById('perfNote').textContent = `All rows as of ${fmtDate(DATES[END])}, the latest close every selected fund has. Price is the latest close in the dataset. "–" means the fund is younger than the period. ${S.ann?'Periods longer than 1 year are annualized (CAGR).':'Returns are cumulative.'} Max DD is the deepest peak-to-trough fall since 1999 or since launch.`;
+}
+
+/* ---------- optimizer math ---------- */
+function covMatrix(R){ // R: T x n daily returns
+  const T=R.length, n=R[0].length, mu=new Array(n).fill(0);
+  for(const r of R) for(let j=0;j<n;j++) mu[j]+=r[j]/T;
+  const S=[...Array(n)].map(()=>new Array(n).fill(0));
+  for(const r of R) for(let i=0;i<n;i++){ const di=r[i]-mu[i]; for(let j=i;j<n;j++) S[i][j]+=di*(r[j]-mu[j]); }
+  for(let i=0;i<n;i++) for(let j=i;j<n;j++){ S[i][j]/=(T-1); S[j][i]=S[i][j]; }
+  return {mu,S};
+}
+function ledoitWolf(R, mu, S){ // shrink toward scaled identity (Ledoit & Wolf 2004)
+  const T=R.length, n=S.length; let m=0; for(let i=0;i<n;i++) m+=S[i][i]; m/=n;
+  let d2=0; for(let i=0;i<n;i++) for(let j=0;j<n;j++){ const x=S[i][j]-(i===j?m:0); d2+=x*x; }
+  let b2=0;
+  for(const r of R){ const x=r.map((v,j)=>v-mu[j]); let s=0; for(let i=0;i<n;i++) for(let j=0;j<n;j++){ const y=x[i]*x[j]-S[i][j]; s+=y*y; } b2+=s; }
+  b2/=T*T; b2=Math.min(b2,d2); const delta = d2>0 ? b2/d2 : 1;
+  return {C:S.map((row,i)=>row.map((v,j)=>delta*(i===j?m:0)+(1-delta)*v)), delta};
+}
+const mv=(A,x)=>A.map(r=>r.reduce((s,v,j)=>s+v*x[j],0));
+const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
+function projCapSimplex(v, cap){ // project onto {w>=0, sum w=1, w<=cap}
+  let lo=Math.min(...v)-cap-1, hi=Math.max(...v)+1;
+  for(let k=0;k<100;k++){ const t=(lo+hi)/2; const s=v.reduce((a,x)=>a+Math.min(cap,Math.max(0,x-t)),0); if(s>1) lo=t; else hi=t; }
+  const t=(lo+hi)/2; return v.map(x=>Math.min(cap,Math.max(0,x-t)));
+}
+function maxEig(A){ let x=A.map(()=>1), l=0; for(let k=0;k<60;k++){ const y=mv(A,x); l=Math.sqrt(dot(y,y)); x=y.map(v=>v/(l||1)); } return l; }
+function minVar(C, cap, tilt){ // minimize w'Cw - tilt'w
+  const n=C.length, L=2*maxEig(C)||1; let w=projCapSimplex(new Array(n).fill(1/n),cap);
+  for(let k=0;k<4000;k++){ const g=mv(C,w).map((v,i)=>2*v-(tilt?tilt[i]:0)); const nw=projCapSimplex(w.map((x,i)=>x-g[i]/L),cap); let d=0; for(let i=0;i<n;i++) d=Math.max(d,Math.abs(nw[i]-w[i])); w=nw; if(d<1e-10) break; }
+  return w;
+}
+function maxRatio(C, num, rf, cap, starts){ // maximize (num'w - rf)/sqrt(w'Cw)
+  const f=w=>(dot(num,w)-rf)/Math.sqrt(dot(w,mv(C,w)));
+  let best=null, bf=-Infinity;
+  for(const w0 of starts){
+    let w=projCapSimplex(w0,cap), fw=f(w), step=0.5;
+    for(let k=0;k<3000 && step>1e-9;k++){
+      const Cw=mv(C,w), s2=dot(w,Cw), s=Math.sqrt(s2), e=dot(num,w)-rf;
+      const g=num.map((m,i)=>(m*s - e*Cw[i]/s)/s2);
+      const nw=projCapSimplex(w.map((x,i)=>x+step*g[i]),cap), fn=f(nw);
+      if(fn>fw+1e-14){ w=nw; fw=fn; step*=1.2; } else step*=0.5;
+    }
+    if(fw>bf){ bf=fw; best=w; }
+  }
+  return best;
+}
+function riskParity(C){ // equal risk contribution, cyclical coordinate descent
+  const n=C.length; let x=C.map((r,i)=>1/Math.sqrt(r[i]));
+  for(let it=0;it<500;it++){
+    let mx=0;
+    for(let i=0;i<n;i++){ let c=0; for(let j=0;j<n;j++) if(j!==i) c+=C[i][j]*x[j]; const nx=(-c+Math.sqrt(c*c+4*C[i][i]*(1/n)))/(2*C[i][i]); mx=Math.max(mx,Math.abs(nx-x[i])); x[i]=nx; }
+    if(mx<1e-12) break;
+  }
+  const s=x.reduce((a,b)=>a+b,0); return x.map(v=>v/s);
+}
+function hrp(C){ // Hierarchical Risk Parity (Lopez de Prado 2016), single linkage
+  const n=C.length; const sd=C.map((r,i)=>Math.sqrt(r[i]));
+  const dist=C.map((r,i)=>r.map((v,j)=>Math.sqrt(Math.max(0,0.5*(1-v/(sd[i]*sd[j]))))));
+  // correlation-distance of distances (as in the paper)
+  const dd=dist.map((ri,i)=>dist.map((rj,j)=>Math.sqrt(ri.reduce((s,v,k)=>s+(v-rj[k])**2,0))));
+  let clusters=[...Array(n)].map((_,i)=>({items:[i]}));
+  const cd=(A,B)=>{ let m=Infinity; for(const a of A.items) for(const b of B.items) m=Math.min(m,dd[a][b]); return m; };
+  while(clusters.length>1){
+    let bi=0,bj=1,bm=Infinity;
+    for(let i=0;i<clusters.length;i++) for(let j=i+1;j<clusters.length;j++){ const d=cd(clusters[i],clusters[j]); if(d<bm){ bm=d; bi=i; bj=j; } }
+    const merged={items:[...clusters[bi].items,...clusters[bj].items], l:clusters[bi], r:clusters[bj]};
+    clusters=clusters.filter((_,k)=>k!==bi&&k!==bj); clusters.push(merged);
+  }
+  const order=[]; (function walk(c){ if(c.l){ walk(c.l); walk(c.r); } else order.push(c.items[0]); })(clusters[0]);
+  const w=new Array(n).fill(1);
+  const cvar=items=>{ const iv=items.map(i=>1/C[i][i]); const s=iv.reduce((a,b)=>a+b,0); const ww=iv.map(v=>v/s); let v=0; items.forEach((i,a)=>items.forEach((j,b)=>{ v+=ww[a]*ww[b]*C[i][j]; })); return v; };
+  let stack=[order];
+  while(stack.length){ const nxt=[]; for(const c of stack){ if(c.length<2) continue; const h=c.length>>1, L=c.slice(0,h), R=c.slice(h); const vl=cvar(L), vr=cvar(R), a=1-vl/(vl+vr); L.forEach(i=>w[i]*=a); R.forEach(i=>w[i]*=1-a); nxt.push(L,R); } stack=nxt; }
+  return {w, order};
+}
+
+function solve(A,b){ // Gaussian elimination with partial pivoting
+  const n=A.length, M=A.map((r,i)=>[...r,b[i]]);
+  for(let c=0;c<n;c++){
+    let p=c; for(let r=c+1;r<n;r++) if(Math.abs(M[r][c])>Math.abs(M[p][c])) p=r;
+    const tmp=M[c]; M[c]=M[p]; M[p]=tmp; const d=M[c][c]||1e-18;
+    for(let r=0;r<n;r++){ if(r===c) continue; const f=M[r][c]/d; if(f) for(let k=c;k<=n;k++) M[r][k]-=f*M[c][k]; }
+  }
+  return M.map((r,i)=>r[n]/(r[i]||1e-18));
+}
+function invert(A){ const n=A.length; const cols=A.map((_,j)=>solve(A,A.map((_,i)=>i===j?1:0))); return A.map((_,i)=>cols.map(c=>c[i])); }
+function ledoitWolfCC(R, mu){ // Ledoit & Wolf (2004) "Honey, I shrunk the sample covariance matrix": constant-correlation target
+  const T=R.length, n=mu.length, z=()=>[...Array(n)].map(()=>new Array(n).fill(0));
+  const X=R.map(r=>r.map((v,j)=>v-mu[j])), S=z(), P=z(), TH=z();
+  for(const x of X) for(let i=0;i<n;i++) for(let j=0;j<n;j++) S[i][j]+=x[i]*x[j]/T;
+  const sd=S.map((r,i)=>Math.sqrt(r[i]));
+  let rbar=0; for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) rbar+=S[i][j]/(sd[i]*sd[j]); rbar = n>1 ? 2*rbar/(n*(n-1)) : 0;
+  const F=S.map((r,i)=>r.map((v,j)=>i===j?v:rbar*sd[i]*sd[j]));
+  for(const x of X) for(let i=0;i<n;i++){ const a=x[i]*x[i]-S[i][i]; for(let j=0;j<n;j++){ const y=x[i]*x[j]-S[i][j]; P[i][j]+=y*y/T; TH[i][j]+=a*y/T; } }
+  let pi=0, rho=0, gam=0;
+  for(let i=0;i<n;i++) for(let j=0;j<n;j++){ pi+=P[i][j]; gam+=(F[i][j]-S[i][j])**2; if(i===j) rho+=P[i][i]; else rho+=rbar/2*(Math.sqrt(S[j][j]/S[i][i])*TH[i][j]+Math.sqrt(S[i][i]/S[j][j])*TH[j][i]); }
+  const delta = gam>0 ? Math.max(0,Math.min(1,(pi-rho)/gam/T)) : 1;
+  return {C:S.map((r,i)=>r.map((v,j)=>delta*F[i][j]+(1-delta)*v)), delta, rbar};
+}
+function blackLitterman(C, wEq, riskAv, tau, views){ // He & Litterman (1999); view uncertainty from confidence (Idzorek-style scaling)
+  const pi=mv(C,wEq).map(v=>riskAv*v);
+  if(!views.length) return {mu:pi.slice(), pi};
+  const tS=C.map(r=>r.map(v=>v*tau)), tSi=invert(tS);
+  const A=tSi.map(r=>r.slice()), b=mv(tSi,pi);
+  views.forEach(v=>{ const s=dot(v.p,mv(tS,v.p)); const c=Math.min(0.995,Math.max(0.01,v.conf)); const om=Math.max(1e-12,s*(1-c)/c);
+    for(let i=0;i<v.p.length;i++){ b[i]+=v.p[i]*v.q/om; for(let j=0;j<v.p.length;j++) A[i][j]+=v.p[i]*v.p[j]/om; } });
+  return {mu:solve(A,b), pi};
+}
+function cvarLoss(R,w,alpha){ const L=R.map(r=>-dot(r,w)).sort((a,b)=>b-a); const k=Math.max(1,Math.ceil((1-alpha)*L.length)); let s=0; for(let i=0;i<k;i++) s+=L[i]; return s/k; }
+function meanCVaR(R, alpha, cap, target, iters, w0){ // projected subgradient on the Rockafellar-Uryasev CVaR with a return-floor penalty
+  const T=R.length, n=R[0].length, k=Math.max(1,Math.ceil((1-alpha)*T));
+  const mud=new Array(n).fill(0); for(const r of R) for(let j=0;j<n;j++) mud[j]+=r[j]/T;
+  let w=projCapSimplex(w0||new Array(n).fill(1/n),cap), best=w, bf=Infinity;
+  const pen=400, L=new Float64Array(T), idx=new Uint32Array(T);
+  for(let it=0;it<iters;it++){
+    for(let t=0;t<T;t++){ const r=R[t]; let s=0; for(let j=0;j<n;j++) s+=r[j]*w[j]; L[t]=-s; idx[t]=t; }
+    idx.sort((a,b)=>L[b]-L[a]);
+    const g=new Array(n).fill(0); let cv=0;
+    for(let q=0;q<k;q++){ const t=idx[q], r=R[t]; cv+=L[t]; for(let j=0;j<n;j++) g[j]-=r[j]/k; }
+    cv/=k;
+    const short = target==null ? 0 : Math.max(0, target-dot(mud,w));
+    const f=cv+pen*short; if(f<bf){ bf=f; best=w; }
+    if(short>0) for(let j=0;j<n;j++) g[j]-=pen*mud[j];
+    const gn=Math.sqrt(dot(g,g))||1, step=0.06/Math.sqrt(it+1);
+    w=projCapSimplex(w.map((x,j)=>x-step*g[j]/gn),cap);
+  }
+  return best;
+}
+function chol(A){ const n=A.length, L=[...Array(n)].map(()=>new Array(n).fill(0));
+  for(let i=0;i<n;i++) for(let j=0;j<=i;j++){ let s=A[i][j]; for(let k=0;k<j;k++) s-=L[i][k]*L[j][k]; L[i][j]= i===j ? Math.sqrt(Math.max(s,1e-14)) : s/L[j][j]; }
+  return L; }
+function stressCov(C, s){ const sd=C.map((r,i)=>Math.sqrt(r[i])); return C.map((r,i)=>r.map((v,j)=>{ if(i===j) return v; const rho=v/(sd[i]*sd[j]); return (rho+s*(1-rho))*sd[i]*sd[j]; })); }
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function gauss(rnd){ let u=0,v=0; while(!u) u=rnd(); while(!v) v=rnd(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+
+/* ---------- optimizer UI ---------- */
+const MODELS = [
+  ['cur','Current'],['ew','Equal weight'],['iv','Inverse volatility'],['mv','Shrinkage min-variance'],['ms','Max Sharpe (classic)'],
+  ['bl','Black-Litterman'],['rp','Risk parity (ERC)'],['hrp','HRP'],['cvar','Mean-CVaR'],['md','Max diversification']
+];
+const modelLabel = k => k==='mv' && document.getElementById('covMode').value==='sample' ? 'Min variance (sample)' : MODELS.find(m=>m[0]===k)[1];
+const CMP = [
+  ['Equal weight','None','No','vh:Very high','Nothing is estimated, so it cannot overfit','A benchmark every model should beat'],
+  ['Inverse volatility','Volatilities','No','h:High','Scales down jumpy funds; ignores correlations','Funds that are about equally correlated'],
+  ['Shrinkage min-variance','Shrunk covariance (Ledoit-Wolf)','Low to moderate','h:High','No return forecasts; shrinkage tames noisy correlation spikes','A core low-volatility sleeve'],
+  ['Max Sharpe (classic)','Historical mean returns, covariance','No','l:Low','Best on paper, but small return errors swing the weights ("error maximization")','A reference point only, not live use'],
+  ['Black-Litterman','Neutral weights, covariance, your views','Moderate (normal-distribution base)','h:High','Starts from a neutral portfolio and tilts only where you have a view','Adding tactical views to a strategic mix'],
+  ['Risk parity (ERC)','Covariance','Moderate','h:High','Every fund contributes the same share of risk','All-weather mixes across asset classes'],
+  ['HRP','Correlations, covariance','Moderate','vh:Very high','Clusters similar funds and never inverts the covariance matrix','Many overlapping or highly correlated funds'],
+  ['Mean-CVaR','Historical return scenarios','Yes, explicitly','h:High','Minimizes the average loss on the worst days, without penalizing upside','Fat-tailed assets or strict drawdown limits'],
+  ['Max diversification','Volatilities, covariance','No','m:Moderate','Favors funds whose returns move differently','Combining distinct return drivers']
+];
+function renderCmp(){
+  const tag=s=>{ const [c,t]=s.split(':'); return `<span class="tag ${c}">${t}</span>`; };
+  document.getElementById('cmpTable').innerHTML='<thead><tr><th>Method</th><th>Inputs</th><th>Return forecast</th><th>Handles fat tails</th><th>Out-of-sample stability</th><th>Key strength</th><th>Best for</th></tr></thead><tbody>'+
+    CMP.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[0]==='Black-Litterman'?'Optional (views only)':r[0]==='Max Sharpe (classic)'?'Yes, every fund':r[0]==='Mean-CVaR'?'Scenario-based':'No'}</td><td>${r[2]}</td><td>${tag(r[3])}</td><td>${r[4]}</td><td>${r[5]}</td></tr>`).join('')+'</tbody>';
+}
+
+/* Black-Litterman views */
+function riskyTickers(){ const fixOn=document.getElementById('fixCash').checked; return S.holdings.map(h=>h.t).filter(t=>!(fixOn && ['SGOV','BIL','SHV'].includes(t))); }
+function renderViews(){
+  if(!S.views) S.views=[];
+  const box=document.getElementById('viewList'); const rt=riskyTickers();
+  if(!S.views.length){ box.innerHTML='<p class="foot" style="margin:0">No views yet, so Black-Litterman keeps the neutral starting weights. Add a view such as "QQQ will beat VT by 2% a year, 50% confident".</p>'; return; }
+  const opts=(sel)=>rt.map(t=>`<option ${t===sel?'selected':''}>${t}</option>`).join('');
+  box.innerHTML=S.views.map((v,i)=>{
+    const bad=!rt.includes(v.a)||(v.type==='rel'&&(!rt.includes(v.b)||v.b===v.a));
+    return `<div class="view" data-i="${i}">
+      <select data-f="a" aria-label="Fund">${rt.includes(v.a)?'':`<option selected>${v.a}</option>`}${opts(v.a)}</select>
+      <select data-f="type" aria-label="View type"><option value="rel" ${v.type==='rel'?'selected':''}>will beat</option><option value="abs" ${v.type==='abs'?'selected':''}>will return</option></select>
+      ${v.type==='rel'?`<select data-f="b" aria-label="Compared fund">${rt.includes(v.b)?'':`<option selected>${v.b||''}</option>`}${opts(v.b)}</select><span>by</span>`:''}
+      <input type="number" data-f="q" step="0.5" value="${v.q}" aria-label="Percent per year"><span>% a year,</span>
+      <input type="range" data-f="c" min="5" max="100" step="5" value="${v.c}" aria-label="Confidence"><span class="conf">${v.c}%</span><span>confident</span>
+      <button class="x" type="button" data-del="${i}" aria-label="Remove view">×</button>
+      ${bad?`<span class="stale-tag">Ignored: ${v.type==='rel'&&v.b===v.a?'pick two different funds':'pick funds that are in the optimizer'}</span>`:''}</div>`; }).join('');
+  box.querySelectorAll('.view').forEach(row=>{ const v=S.views[+row.dataset.i];
+    row.querySelectorAll('[data-f]').forEach(el=>{
+      el.addEventListener('input',()=>{ if(el.dataset.f==='c') row.querySelector('.conf').textContent=el.value+'%'; });
+      el.addEventListener('change',()=>{ const f=el.dataset.f; v[f]= (f==='q'||f==='c') ? +el.value : el.value; if(f==='type'&&v.type==='rel'&&!v.b){ v.b=riskyTickers().find(t=>t!==v.a)||v.a; } save(); renderViews(); reOptimize(); });
+    });
+    row.querySelector('[data-del]').addEventListener('click',()=>{ S.views.splice(+row.dataset.i,1); save(); renderViews(); reOptimize(); });
+  });
+}
+document.getElementById('addView').addEventListener('click',()=>{ const rt=riskyTickers(); if(rt.length<2){ toast('Select at least two funds first.'); return; }
+  if(!S.views) S.views=[]; const va=rt.includes('QQQ')?'QQQ':rt[0]; const vb=rt.includes('VT')&&va!=='VT'?'VT':rt.find(x=>x!==va); S.views.push({type:'rel',a:va,b:vb,q:2,c:50}); save(); renderViews(); reOptimize(); });
+
+let OPT=null, scatter;
+function runOptimizer(){
+  const warn=document.getElementById('optWarn'); warn.innerHTML='';
+  const tick=S.holdings.map(h=>h.t);
+  if(tick.length<2){ OPT=null; warn.innerHTML='<div class="warn">Select at least two funds to optimize.</div>'; return; }
+  const [ca,cb]=commonRange(tick);
+  const lb=+document.getElementById('lookback').value;
+  const a = lb ? Math.max(ca, idxOnOrBefore(shiftDate(DATES[cb],-12*lb))) : ca;
+  const R=[]; for(let i=a+1;i<=cb;i++) R.push(tick.map(t=>val(t,i)/val(t,i-1)-1));
+  if(R.length<120){ OPT=null; warn.innerHTML='<div class="warn">Not enough shared history. One of the funds is too new.</div>'; return; }
+  const short = lb && (TS[cb]-TS[a]) < (lb-0.1)*365.25*864e5;
+  const {mu:md,S:Sd}=covMatrix(R);
+  const covMode=document.getElementById('covMode').value;
+  let Cd=Sd, delta=0;
+  if(covMode==='lwcc'){ const r=ledoitWolfCC(R,md); Cd=r.C; delta=r.delta; } else if(covMode==='lw'){ const r=ledoitWolf(R,md,Sd); Cd=r.C; delta=r.delta; }
+  const C=Cd.map(r=>r.map(v=>v*252)), mu=md.map(v=>v*252);
+  const CASHLIKE=['SGOV','BIL','SHV'];
+  const fixOn=document.getElementById('fixCash').checked;
+  const fixed=tick.map(t=>fixOn && CASHLIKE.includes(t));
+  const ri=tick.map((_,i)=>i).filter(i=>!fixed[i]);
+  if(ri.length<2){ OPT=null; warn.innerHTML='<div class="warn">Select at least two non-T-bill funds to optimize, or untick the T-bill option.</div>'; return; }
+  const n=tick.length, nr=ri.length, capIn=+document.getElementById('cap').value; let cap=capIn; if(cap*nr<1){ cap=1/nr; }
+  const rf=(+document.getElementById('rf').value||0)/100;
+  const sig=C.map((r,i)=>Math.sqrt(r[i]));
+  const W={};
+  const pw=S.holdings.map(h=>h.w), ps=pw.reduce((x,y)=>x+y,0);
+  W.cur = ps>0 ? pw.map(v=>v/ps) : new Array(n).fill(1/n);
+  const fixW = fixed.map((f,i)=>f?W.cur[i]:0), fixSum=fixW.reduce((x,y)=>x+y,0);
+  const rTick=ri.map(i=>tick[i]);
+  const Cr=ri.map(i=>ri.map(j=>C[i][j])), mur=ri.map(i=>mu[i]), sigr=ri.map(i=>sig[i]);
+  const Rr=R.map(r=>ri.map(i=>r[i]));
+  const curR=(()=>{ const v=ri.map(i=>W.cur[i]); const s=v.reduce((x,y)=>x+y,0); return s>0 ? v.map(x=>x/s) : null; })();
+  const sub={};
+  sub.ew = new Array(nr).fill(1/nr);
+  const iv=sigr.map(s=>1/s), ivs=iv.reduce((x,y)=>x+y,0); sub.iv=iv.map(v=>v/ivs);
+  sub.mv = minVar(Cr,cap);
+  const starts=[sub.ew, sub.mv, sub.iv, ...ri.map((_,i)=>ri.map((_,j)=>i===j?1:0))];
+  const anyPos = mur.some(m=>m>rf);
+  sub.ms = anyPos ? maxRatio(Cr,mur,rf,cap,starts) : sub.mv.slice();
+  sub.rp = riskParity(Cr);
+  sub.hrp = hrp(Cr).w;
+  sub.md = maxRatio(Cr,sigr,0,cap,starts);
+  // Black-Litterman
+  const prior=document.getElementById('blPrior').value, riskAv=Math.max(0.1,+document.getElementById('blDelta').value||2.5), tau=0.05;
+  let wEq;
+  if(prior==='aum'){ const aums=rTick.map(t=>D.meta[t]&&D.meta[t].aum); const known=aums.filter(x=>x>0).sort((x,y)=>x-y); const med=known.length?known[known.length>>1]:1; const v=aums.map(x=>x>0?x:med); const s=v.reduce((x,y)=>x+y,0); wEq=v.map(x=>x/s); }
+  else if(prior==='cur' && curR) wEq=curR; else wEq=sub.ew.slice();
+  const views=(S.views||[]).map(v=>{ const ia=rTick.indexOf(v.a), ib=v.type==='rel'?rTick.indexOf(v.b):-1;
+    if(ia<0 || (v.type==='rel' && (ib<0||ib===ia))) return null;
+    const p=new Array(nr).fill(0); p[ia]=1; if(v.type==='rel') p[ib]=-1; return {p,q:(+v.q||0)/100,conf:(+v.c||50)/100}; }).filter(Boolean);
+  const BL=blackLitterman(Cr,wEq,riskAv,tau,views);
+  sub.bl = minVar(Cr,cap,BL.mu.map(m=>2*m/riskAv));
+  // Mean-CVaR
+  const alpha=+document.getElementById('cvAlpha').value;
+  const mud=mur.map(m=>m/252);
+  const target = document.getElementById('cvTarget').value==='cur' && curR ? dot(mud,curR) : null;
+  sub.cvar = meanCVaR(Rr,alpha,cap,target,1200,sub.mv);
+  for(const k in sub){ const full=fixW.slice(); ri.forEach((i,j)=>{ full[i]=sub[k][j]*(1-fixSum); }); W[k]=full; }
+  // frontier
+  const fr=[]; const lam=[0,0.02,0.05,0.1,0.2,0.35,0.5,0.75,1,1.5,2,3,5,8,13,20,40];
+  lam.forEach(l=>{ const s=minVar(Cr,cap,mur.map(m=>m*l)); const w=fixW.slice(); ri.forEach((i,j)=>{ w[i]=s[j]*(1-fixSum); }); fr.push({x:Math.sqrt(dot(w,mv(C,w)))*100, y:dot(mu,w)*100}); });
+  fr.sort((p,q)=>p.x-q.x);
+  const stats={};
+  for(const [k] of MODELS){ const wts={}; tick.forEach((t,i)=>{ if(W[k][i]>1e-6) wts[t]=W[k][i]; }); const v=simulate(wts,a,cb,S.rebal); const s={a,b:cb,get:i=>v[i-a]};
+    const r=dailyRets(s,a,cb); const vol=stdev(r)*Math.sqrt(252), g=cagr(s,a,cb); const w=W[k];
+    const srt=r.slice().sort((x,y)=>x-y), kk=Math.max(1,Math.ceil((1-alpha)*srt.length)); let cv=0; for(let q=0;q<kk;q++) cv+=srt[q]; cv/=kk;
+    stats[k]={cagr:g, vol, sharpe:(g-rf)/vol, dd:maxDD(s,a,cb), er:dot(mu,w), ev:Math.sqrt(dot(w,mv(C,w))), dr:dot(sig,w)/Math.sqrt(dot(w,mv(C,w))), cvar:cv}; }
+  OPT={tick,W,stats,a,b:cb,C,mu,sig,fr,cap,delta,rf,anyPos,short,lb,fixSum,fixed,covMode,alpha,
+    bl:{rTick,wEq,pi:BL.pi,mu:BL.mu,w:sub.bl,nViews:views.length,riskAv,tau,prior},
+    ctx:{rTick,Cr,mur,Rr,cap,rf,riskAv,tau,wEq,views,alpha,target,base:sub}};
+  const msgs=[];
+  if(short) msgs.push(`Shared history only starts ${fmtDate(DATES[a])}, shorter than the lookback you picked.`);
+  if(!anyPos) msgs.push('No fund beat the risk-free rate in this window, so Max Sharpe falls back to Min variance.');
+  if(capIn*nr<1) msgs.push(`A ${(capIn*100).toFixed(0)}% cap is impossible with ${nr} funds, so the cap is ${(100/nr).toFixed(1)}%.`);
+  if(target!=null && dot(mud,sub.cvar) < target*0.98) msgs.push('Mean-CVaR could not reach your current portfolio\'s return under the weight cap, so it got as close as it could.');
+  if(msgs.length) warn.innerHTML=`<div class="warn">${msgs.join(' ')}</div>`;
+}
+function renderBL(){
+  const tb=document.getElementById('blTable'), note=document.getElementById('blNote');
+  if(!OPT){ tb.innerHTML=''; note.textContent=''; return; }
+  const b=OPT.bl;
+  tb.innerHTML='<thead><tr><th>Fund</th><th>Neutral</th><th>Implied return</th><th>BL return</th><th>BL weight</th></tr></thead><tbody>'+
+    b.rTick.map((t,i)=>`<tr><td><span class="tick"><span class="sw" style="background:${colorOf(t)}"></span>${t}</span></td><td>${(b.wEq[i]*100).toFixed(1)}%</td><td>${pct(b.pi[i],1)}</td><td class="${b.mu[i]-b.pi[i]>0.0005?'up':b.mu[i]-b.pi[i]<-0.0005?'down':''}">${pct(b.mu[i],1)}</td><td>${(b.w[i]*100).toFixed(1)}%</td></tr>`).join('')+'</tbody>';
+  const pr={cur:'your current weights',aum:'fund size (assets under management, a stand-in for market cap)',ew:'equal weights'}[b.prior];
+  note.textContent=`Implied returns come from reverse optimization of ${pr} (δ = ${b.riskAv}, τ = ${b.tau}). ${b.nViews?`${b.nViews} view${b.nViews>1?'s':''} blended in by Bayesian updating; lower confidence means a smaller tilt.`:'With no views the model stays at the neutral weights (within the weight cap).'} T-bill funds held fixed are left out.`;
+}
+function renderOptimizer(){
+  const tbl=document.getElementById('wtTable');
+  renderBL();
+  if(!OPT){ tbl.innerHTML=''; if(scatter){ scatter.data.datasets=[]; scatter.update('none'); } document.getElementById('simOut').innerHTML=''; return; }
+  const {tick,W,stats}=OPT;
+  let h='<thead><tr><th>Fund</th>'+MODELS.map(([k])=>`<th class="${k==='cur'?'cur':''}">${modelLabel(k)}${k!=='cur'?`<button class="btn apply" type="button" data-k="${k}">Apply</button>`:''}</th>`).join('')+'</tr></thead><tbody>';
+  tick.forEach((t,i)=>{ h+=`<tr><td><span class="tick"><span class="sw" style="background:${colorOf(t)}"></span>${t}</span>${OPT.fixed[i]?'<span class="fname">fixed</span>':''}</td>`+MODELS.map(([k])=>{ const w=W[k][i]; return `<td><span class="bar"><i style="width:${Math.round(w*44)}px"></i>${(w*100).toFixed(1)}%</span></td>`; }).join('')+'</tr>'; });
+  const mrow=(label,f)=>`<tr class="metric"><td>${label}</td>`+MODELS.map(([k])=>`<td>${f(stats[k])}</td>`).join('')+'</tr>';
+  h+=mrow('Return, annualized', s=>`<span class="${cls(s.cagr)}">${pct(s.cagr,1)}</span>`);
+  h+=mrow('Volatility', s=>pct(s.vol,1,false));
+  h+=mrow('Sharpe ratio', s=>s.sharpe.toFixed(2));
+  h+=mrow('Max drawdown', s=>`<span class="down">${pct(s.dd,1)}</span>`);
+  h+=mrow(`CVaR ${OPT.alpha===0.99?'99':'95'}% (avg. worst-day loss)`, s=>`<span class="down">${pct(s.cvar,2)}</span>`);
+  h+=mrow('Diversification ratio', s=>s.dr.toFixed(2));
+  h+='</tbody>';
+  tbl.innerHTML=h;
+  tbl.querySelectorAll('.apply').forEach(b=>b.addEventListener('click',()=>{
+    const k=b.dataset.k, inv=100-S.opt;
+    S.holdings.forEach((hh,i)=>{ hh.w=Math.round(W[k][i]*inv*2)/2; });
+    const diff=Math.round((inv - S.holdings.reduce((s,x)=>s+x.w,0))*2)/2; if(diff){ const big=S.holdings.reduce((x,y)=>y.w>x.w?y:x); big.w=+(big.w+diff).toFixed(1); }
+    update(); toast(`Applied ${modelLabel(k)} weights`); document.getElementById('h-build').scrollIntoView({behavior:'smooth'});
+  }));
+  const sets=[{type:'line',label:'Efficient frontier',data:OPT.fr,borderColor:'#9aa4af',borderWidth:1.5,borderDash:[5,4],pointRadius:0,order:3}];
+  tick.forEach((t,i)=>sets.push({type:'scatter',label:t,data:[{x:OPT.sig[i]*100,y:OPT.mu[i]*100}],backgroundColor:colorOf(t),borderColor:'#fff',borderWidth:2,pointRadius:6,pointHoverRadius:8,order:2}));
+  const shapes={cur:'star',ew:'rect',iv:'rectRot',mv:'triangle',ms:'crossRot',bl:'rectRounded',rp:'circle',hrp:'circle',cvar:'triangle',md:'cross'};
+  const fills={cur:INK,hrp:'#9aa4af',cvar:'#9aa4af'};
+  MODELS.forEach(([k])=>sets.push({type:'scatter',label:modelLabel(k),data:[{x:stats[k].ev*100,y:stats[k].er*100}],pointStyle:shapes[k],backgroundColor:fills[k]||'#ffffff',borderColor:INK,borderWidth:1.6,pointRadius:k==='cur'?9:7,pointHoverRadius:9,order:1}));
+  if(!scatter){
+    scatter=new Chart(document.getElementById('scatter'),{type:'scatter',data:{datasets:sets},options:{animation:false,responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{usePointStyle:true,boxWidth:8,boxHeight:8,font:{size:11}}},
+        tooltip:{backgroundColor:'#fff',titleColor:'#0f1720',bodyColor:'#0f1720',borderColor:'#c8cfd8',borderWidth:1,callbacks:{label:c=>`${c.dataset.label}: return ${c.parsed.y.toFixed(1)}%, risk ${c.parsed.x.toFixed(1)}%`}}},
+      scales:{x:{title:{display:true,text:'Volatility (% / yr)'},grid:{color:'#eef1f4'},ticks:{callback:v=>v+'%'}},y:{title:{display:true,text:'Mean return (% / yr)'},grid:{color:'#eef1f4'},ticks:{callback:v=>v+'%'}}}}});
+  } else { scatter.data.datasets=sets; scatter.update('none'); }
+  const capTxt = (OPT.cap<1 ? `The ${(OPT.cap*100).toFixed(0)}% cap (share of the funds being optimized) applies to min-variance, Max Sharpe, Black-Litterman, Mean-CVaR and Max diversification.` : 'No weight cap.') + (OPT.fixSum>0 ? ` T-bill funds stay fixed at ${(OPT.fixSum*100).toFixed(1)}% of the invested part, since a near-zero-volatility fund would otherwise take almost all the weight in the risk-based models.` : '');
+  const covTxt = OPT.covMode==='lwcc' ? `Ledoit-Wolf shrank the covariance ${(OPT.delta*100).toFixed(0)}% toward a constant-correlation target.` : OPT.covMode==='lw' ? `Ledoit-Wolf shrank the covariance ${(OPT.delta*100).toFixed(0)}% toward a scaled identity target.` : 'Sample covariance, no shrinkage.';
+  document.getElementById('optNote').textContent = `Window: ${fmtDate(DATES[OPT.a])} to ${fmtDate(DATES[OPT.b])}, daily total returns, long-only. ${capTxt} ${covTxt} Table figures are a backtest of each model in the same window with your rebalancing setting, so they flatter the models (they were fit on this data). The chart plots expected mean return against volatility.`;
+  scheduleSim();
+}
+
+/* ---------- robustness simulator ---------- */
+const SIM_MODELS=['ew','mv','ms','bl','rp','hrp','cvar','md'];
+let simTimer=null;
+function simLabels(){ document.getElementById('simNoiseV').textContent=`±${(+document.getElementById('simNoise').value).toFixed(1)}% / yr`; document.getElementById('simStressV').textContent=`+${document.getElementById('simStress').value}%`; }
+function scheduleSim(){ clearTimeout(simTimer); simLabels(); if(!OPT) return; document.getElementById('simOut').style.opacity=.5; simTimer=setTimeout(runSim,60); }
+['simNoise','simStress'].forEach(id=>{ const el=document.getElementById(id); el.addEventListener('input',simLabels); el.addEventListener('change',scheduleSim); });
+function runSim(){
+  const out=document.getElementById('simOut'); if(!OPT){ out.innerHTML=''; return; }
+  const x=OPT.ctx, n=x.rTick.length, noise=(+document.getElementById('simNoise').value)/100, s=(+document.getElementById('simStress').value)/100;
+  const draws=20, rnd=mulberry32(12345);
+  const Cs=stressCov(x.Cr,s), Csd=Cs.map(r=>r.map(v=>v/252)), Cdd=x.Cr.map(r=>r.map(v=>v/252));
+  // stressed scenarios for Mean-CVaR: re-color demeaned returns from the base to the stressed covariance
+  const m=new Array(n).fill(0); for(const r of x.Rr) for(let j=0;j<n;j++) m[j]+=r[j]/x.Rr.length;
+  let Rs=x.Rr;
+  if(s>0){ const L=chol(Cdd), Ls=chol(Csd); Rs=x.Rr.map(r=>{ const d=r.map((v,j)=>v-m[j]); const z=new Array(n); for(let i=0;i<n;i++){ let t=d[i]; for(let k=0;k<i;k++) t-=L[i][k]*z[k]; z[i]=t/L[i][i]; } return Ls.map((row,i)=>{ let t=m[i]; for(let k=0;k<=i;k++) t+=row[k]*z[k]; return t; }); }); }
+  const det={ew:new Array(n).fill(1/n)};
+  det.mv=minVar(Cs,x.cap); det.rp=riskParity(Cs); det.hrp=hrp(Cs).w;
+  const sg=Cs.map((r,i)=>Math.sqrt(r[i]));
+  det.md=maxRatio(Cs,sg,0,x.cap,[det.ew,det.mv]);
+  const res={}; SIM_MODELS.forEach(k=>res[k]=[]);
+  for(let d=0;d<draws;d++){
+    const eps=x.mur.map(()=>gauss(rnd)*noise);
+    const muD=x.mur.map((v,i)=>v+eps[i]);
+    res.ms.push(muD.some(v=>v>x.rf) ? maxRatio(Cs,muD,x.rf,x.cap,[det.ew,det.mv]) : det.mv.slice());
+    const vD=x.views.map(v=>({...v,q:v.q+gauss(rnd)*noise}));
+    const bl=blackLitterman(Cs,x.wEq,x.riskAv,x.tau,vD); res.bl.push(minVar(Cs,x.cap,bl.mu.map(v=>2*v/x.riskAv)));
+    const sh=eps.map(e=>e/252); const Rd=Rs.map(r=>r.map((v,j)=>v+sh[j]));
+    res.cvar.push(meanCVaR(Rd,x.alpha,x.cap,x.target,220,x.base.cvar));
+    ['ew','mv','rp','hrp','md'].forEach(k=>res[k].push(det[k]));
+  }
+  const l1=(a,b)=>0.5*a.reduce((t,v,i)=>t+Math.abs(v-b[i]),0);
+  const rows=SIM_MODELS.map(k=>{ const ws=res[k]; const avg=new Array(n).fill(0); ws.forEach(w=>w.forEach((v,i)=>avg[i]+=v/ws.length));
+    const disp=ws.reduce((t,w)=>t+l1(w,avg),0)/ws.length; const shift=l1(avg,x.base[k]); return {k,avg,disp,shift}; });
+  const worstDisp=Math.max(...rows.map(r=>r.disp));
+  out.innerHTML=`<div class="simrow head"><span>Model</span><span>Average weights across 20 runs</span><span class="n" title="Average turnover between the 20 noisy runs">Swing</span><span class="n" title="Turnover from the unstressed, noise-free weights">Shift</span></div>`+
+    rows.map(r=>`<div class="simrow"><span>${modelLabel(r.k)}</span><span class="stack">${r.avg.map((v,i)=>v>0.002?`<span style="flex:${v};background:${colorOf(x.rTick[i])}" title="${x.rTick[i]} ${(v*100).toFixed(1)}%"></span>`:'').join('')}</span><span class="n ${r.disp>=0.15&&r.disp===worstDisp?'hi':''}">${(r.disp*100).toFixed(0)}%</span><span class="n">${(r.shift*100).toFixed(0)}%</span></div>`).join('')+
+    `<p class="foot" style="margin:0">Swing is the average turnover between the 20 noisy runs: how much the model would trade just because of estimation error. Shift is the turnover from today's weights to the stressed average. Models that use no return forecasts swing 0% by design. Black-Litterman swings only through your views, so it holds still with none. Correlation stress moves every model.</p>`;
+  out.style.opacity=1;
+}
+function reOptimize(){ runOptimizer(); renderOptimizer(); }
+['lookback','cap','covMode','rf','fixCash','blPrior','blDelta','cvAlpha','cvTarget'].forEach(id=>document.getElementById(id).addEventListener('change',()=>{ if(id==='fixCash') renderViews(); reOptimize(); }));
+renderCmp();
+
+/* ---------- freshness & refresh ---------- */
+const TRIGGER_ID='trig_01TgB6Za1UJvnn4ajxLguAfE';
+const fmtDT = iso => { if(!iso) return '–'; const d=new Date(iso.replace(/Z$/,':00Z').replace(/:00:00Z$/,':00Z')); return isNaN(d) ? iso : d.toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}); };
+function tradingDaysBehind(dateStr){ const i=DATES.indexOf(dateStr); return i<0 ? null : (N-1-i); }
+function proxyNote(t){ const m=D.meta[t]; return m && m.proxy ? `<span class="proxy-tag" title="This fund trades outside the US and its prices are not in the data source, so its history is rebuilt from US-listed funds that track the two halves of the same index.">Proxy: ${m.proxy}</span>` : ''; }
+function lastCloseNote(t){ const m=D.meta[t]; if(!m) return ''; if(m.proxy) return proxyNote(t); const d=DATES[m.e], lag=tradingDaysBehind(d); return lag>3 ? `<span class="stale-tag">Stale · last close ${fmtDate(d)}</span>` : `Last close ${fmtDate(d)}`; }
+function renderFreshness(){
+  const ageDays=(Date.now()-Date.parse(ASOF+'T21:00:00Z'))/864e5;
+  document.getElementById('stamp').textContent=`${D.list.length.toLocaleString('en-US')} US ETFs · prices through ${fmtDate(ASOF)}`;
+  document.getElementById('stampDot').classList.toggle('stale', ageDays>4);
+  document.getElementById('freshMeta').textContent=`Dataset rebuilt ${fmtDT(D.built)} (your time) from a Yahoo Finance mirror updated ${fmtDT(D.src)}. Refreshes automatically Tue–Sat at 10:47 Bangkok time, after each US trading day.`;
+}
+let MCP=null; const refreshBtn=document.getElementById('refreshBtn');
+async function checkForNewData(){
+  const before=D.built;
+  try{
+    const r=await fetch('etfs.json',{cache:'reload'}); const j=await r.json();
+    if(j.built && j.built!==before){
+      Object.keys(D.t).forEach(k=>delete D.t[k]); Object.keys(SHARD).forEach(k=>delete SHARD[k]); D.list.length=0; D.meta={};
+      await loadIndex({cache:'reload'}); renderFreshness(); await update(true); renderScreener();
+      toast(`Loaded new data: prices through ${fmtDate(ASOF)}`); return true;
+    }
+    toast(`You already have the latest data (prices through ${fmtDate(ASOF)}).`); return false;
+  }catch(e){ toast('Could not check for new data. Try again in a moment.'); return false; }
+}
+async function startRefresh(){
+  refreshBtn.disabled=true; const label=refreshBtn.textContent; refreshBtn.textContent='Starting…';
+  const meta=document.getElementById('freshMeta');
+  try{
+    await MCP.callTool('Claude Code Remote','fire_trigger',{trigger_id:TRIGGER_ID});
+    meta.textContent='Refresh started. Rebuilding the data takes about 5 to 10 minutes; this page picks up the new version by itself.';
+    refreshBtn.textContent='Refresh started';
+    setTimeout(()=>{ refreshBtn.disabled=false; refreshBtn.textContent=label; },60000);
+    return;
+  }catch(e){
+    const c=e&&e.code;
+    const msg = c==='server_not_connected'||c==='selection_required' ? 'Refreshing from this page needs the Claude Code connector in claude.ai. Checked for already-published data instead.'
+      : c==='needs_reauth' ? 'Your Claude Code connector needs signing in again in claude.ai settings. Checked for already-published data instead.'
+      : c==='approval_required'||c==='consent_required'||c==='not_granted' ? 'The refresh needs your OK when claude.ai asks. Checked for already-published data instead.'
+      : c==='tool_error'||c==='blocked_by_policy' ? 'Only the dashboard owner can start a rebuild. Checked for already-published data instead.'
+      : c==='server_unavailable'||c==='upstream_error' ? 'The refresh service did not answer; it may still have started. Checked for already-published data meanwhile.'
+      : 'Could not start a rebuild from here. Checked for already-published data instead.';
+    meta.textContent=msg;
+    await checkForNewData();
+  }
+  refreshBtn.disabled=false; refreshBtn.textContent=label;
+}
+refreshBtn.addEventListener('click',async()=>{
+  if(MCP) return startRefresh();
+  refreshBtn.disabled=true; await checkForNewData(); refreshBtn.disabled=false;
+});
+(async()=>{ try{ MCP = window.claude && claude.use ? await claude.use('mcp') : null; }catch(e){ MCP=null; }
+  refreshBtn.title = MCP ? 'Rebuild the dataset now from the latest US market closes' : 'Check whether a newer dataset has been published'; })();
+
+/* ---------- screener ---------- */
+const SCOLS=[['t','Fund',null,'asc'],['c','Category',null,'asc'],['er','Expense',x=>x==null?'–':(x*100).toFixed(2)+'%','asc'],['aum','Assets',fmtAum,'desc'],['y','Yield',x=>x==null?'–':(x*100).toFixed(2)+'%','desc'],
+  ['r1','1M',0],['r2','6M',2],['r3','YTD',3],['r4','1Y',4],['r5','3Y',5],['r6','5Y',6],['r7','10Y',7],['v','Vol 3Y',x=>x==null?'–':(x*100).toFixed(1)+'%','asc'],['dd','Max DD',x=>pct(x,1),'desc']];
+const RIDX={r1:0,r2:2,r3:3,r4:4,r5:5,r6:6,r7:7};
+let SCR={key:'aum',dir:'desc',lim:50};
+function scrVal(m,k){ return k in RIDX ? m.r[RIDX[k]] : m[k]; }
+function initScreener(){
+  const cats={}; D.list.forEach(m=>{ const c=m.c||'Uncategorized'; cats[c]=(cats[c]||0)+1; });
+  const sel=document.getElementById('scrCat');
+  Object.entries(cats).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([c,n])=>{ const o=document.createElement('option'); o.value=c; o.textContent=`${c} (${n})`; sel.appendChild(o); });
+  ['scrQ','scrCat','scrAum','scrLev'].forEach(id=>document.getElementById(id).addEventListener(id==='scrQ'?'input':'change',()=>{ SCR.lim=50; renderScreener(); }));
+  document.getElementById('scrMore').addEventListener('click',()=>{ SCR.lim+=50; renderScreener(); });
+  renderScreener();
+}
+function renderScreener(){
+  if(!D.list.length) return;
+  const q=document.getElementById('scrQ').value.trim().toUpperCase(), cat=document.getElementById('scrCat').value, minA=+document.getElementById('scrAum').value, hideLev=document.getElementById('scrLev').checked;
+  let rows=D.list.filter(m=>{
+    if(hideLev && /^Trading--/.test(m.c||'')) return false;
+    if(cat && (m.c||'Uncategorized')!==cat) return false;
+    if(minA && !m.proxy && !((m.aum||0)>=minA)) return false;
+    if(q && !(m.t.startsWith(q) || (m.n||'').toUpperCase().includes(q))) return false;
+    return true;
+  });
+  const {key,dir}=SCR, sg=dir==='asc'?1:-1;
+  rows.sort((a,b)=>{ const x=scrVal(a,key), y=scrVal(b,key); if(x==null&&y==null) return 0; if(x==null) return 1; if(y==null) return -1; return (x<y?-1:x>y?1:0)*sg; });
+  const held=new Set(S.holdings.map(h=>h.t)), full=S.holdings.length>=MAXN;
+  let h='<thead><tr>'+SCOLS.map(([k,l])=>`<th class="sortable" data-k="${k}" ${k===key?`aria-sort="${dir==='asc'?'ascending':'descending'}"`:''} tabindex="0">${l}</th>`).join('')+'<th></th></tr></thead><tbody>';
+  rows.slice(0,SCR.lim).forEach(m=>{
+    h+=`<tr><td><span class="tick">${m.t}</span><span class="fname" title="${m.n.replace(/"/g,'&quot;')}">${m.n}</span>${tradingDaysBehind(DATES[m.e])>3||m.proxy?`<span class="fname">${lastCloseNote(m.t)}</span>`:''}</td><td class="cat" title="${m.c}">${m.c||'–'}</td>`;
+    SCOLS.slice(2).forEach(([k,l,f])=>{ const v=scrVal(m,k); if(k in RIDX) h+=`<td class="${cls(v)}">${pct(v,1)}</td>`; else h+=`<td>${f(v)}</td>`; });
+    h+=`<td><button class="btn addb" type="button" data-t="${m.t}" ${held.has(m.t)||full?'disabled':''}>${held.has(m.t)?'Added':'Add'}</button></td></tr>`;
+  });
+  h+='</tbody>';
+  const tb=document.getElementById('scr'); tb.innerHTML=h;
+  tb.querySelectorAll('th.sortable').forEach(th=>{ const go=()=>{ const k=th.dataset.k; if(SCR.key===k) SCR.dir=SCR.dir==='asc'?'desc':'asc'; else { SCR.key=k; const c=SCOLS.find(x=>x[0]===k); SCR.dir=(k in RIDX)?'desc':c[3]; } renderScreener(); }; th.addEventListener('click',go); th.addEventListener('keydown',e=>{ if(e.key==='Enter') go(); }); });
+  tb.querySelectorAll('.addb').forEach(b=>b.addEventListener('click',async()=>{ await addTicker(b.dataset.t); document.getElementById('h-chart').scrollIntoView({behavior:'smooth'}); }));
+  document.getElementById('scrCount').textContent=`Showing ${Math.min(SCR.lim,rows.length).toLocaleString('en-US')} of ${rows.length.toLocaleString('en-US')} matching ETFs (${D.list.length.toLocaleString('en-US')} in total). Returns are total return to each fund's latest close.`+(full?' Your comparison is full (8 funds); remove one to add another.':'');
+  document.getElementById('scrMore').hidden = rows.length<=SCR.lim;
+}
+
+/* ---------- orchestrate ---------- */
+async function update(full){
+  S.holdings.forEach(h=>{ if(h.on===undefined) h.on=true; });
+  try{ await ensure([...S.holdings.map(h=>h.t),'BIL']); }catch(e){ toast('Some price data failed to load. Reload the page.'); return; }
+  if(!S.views) S.views=[];
+  computePortfolio(); renderHoldings(); renderViews(); renderKPIs(); renderChips(); renderChart(); renderPerf();
+  runOptimizer(); renderOptimizer(); save(); if(D.list.length && document.getElementById('scr').innerHTML) renderScreener();
+}
+(async function init(){
+  try{ await loadIndex(); }catch(e){ document.getElementById('stamp').textContent='Could not load the ETF list. Reload the page.'; return; }
+  loadState();
+  renderFreshness(); refreshBtn.disabled=false; document.getElementById('etfCount').textContent=D.list.length.toLocaleString('en-US');
+  await ensure([...S.holdings.map(h=>h.t),'BIL']);
+  const bil=bilRate(rng('BIL')[1]); document.getElementById('rf').value = bil!=null ? (bil*100).toFixed(1) : '4.0';
+  buildChart(); await update(true); initScreener();
+})();
+</script>
