@@ -56,6 +56,8 @@ def get(path, params):
                 sys.exit(f'SEC API refused the key for {path} (HTTP {e.code}): {body}. Check that the key is subscribed to this product.')
             if e.code == 404 or e.code == 204:
                 return {}
+            if e.code == 400 and params.get('start_nav_date') and params.get('start_nav_date') == params.get('end_nav_date') and not params.get('next_cursor'):
+                return {}  # the NAV endpoint answers 400 for a market holiday with no NAV
             if e.code in (421, 429) or e.code >= 500:
                 ra = e.headers.get('Retry-After'); time.sleep(float(ra) if ra and ra.isdigit() else min(60, 2 ** attempt)); continue
             raise RuntimeError(f'HTTP {e.code} {url}: {body}')

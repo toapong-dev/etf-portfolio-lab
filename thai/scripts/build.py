@@ -73,8 +73,9 @@ by_month = defaultdict(int)
 for d, n in cnt.items(): by_month[d[:7]] = max(by_month[d[:7]], n)
 DATES = sorted(d for d, n in cnt.items() if n >= 0.3 * by_month[d[:7]] and dt.date.fromisoformat(d).weekday() < 5)
 LAST = DATES[-1]
-yrs = [d for d in DATES if d > (dt.date.fromisoformat(LAST) - dt.timedelta(days=3 * 365)).isoformat()]
-PPY = round(len(yrs) / 3)  # NAV days per year, ~243 for Thailand
+w0 = max(dt.date.fromisoformat(DATES[0]), dt.date.fromisoformat(LAST) - dt.timedelta(days=3 * 365))
+span = (dt.date.fromisoformat(LAST) - w0).days / 365.25
+PPY = round(sum(1 for d in DATES if d > w0.isoformat()) / span) if span > 0.25 else 243  # NAV days per year, ~243 for Thailand
 CUT = (dt.date.fromisoformat(LAST) - dt.timedelta(days=35)).isoformat()
 def shift(d, months):
     y, m, dd = map(int, d.split('-')); m0 = m - 1 + months; y += m0 // 12; m0 %= 12
@@ -136,8 +137,9 @@ for code in sorted(nav):
 print('kept', len(index), 'skipped', dict(skipped))
 
 # cash proxy for "Optionality" and the risk-free rate: the largest Thai money-market fund with 3+ years of history
-mm = [i for i in index if ('Money Market' in i['c'] or 'MONEY MARKET' in (i['n'] or '').upper()) and i['r'][5] is not None and (i['ft'] in (None, '', 'General'))]
-CASH = max(mm, key=lambda i: i['aum'] or 0)['t'] if mm else None
+mm = [i for i in index if ('Money Market' in i['c'] or 'MONEY MARKET' in (i['n'] or '').upper()) and (i['ft'] in (None, '', 'General'))]
+mm3 = [i for i in mm if i['r'][5] is not None] or mm
+CASH = max(mm3, key=lambda i: i['aum'] or 0)['t'] if mm3 else None
 print('cash fund', CASH)
 
 shards, cur, size = [], [], 0
