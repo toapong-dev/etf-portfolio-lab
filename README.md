@@ -20,7 +20,10 @@ Everything runs client-side. There is no server and no build step for the page.
 | --- | --- |
 | `index.html` | The whole app (HTML, CSS, JS; Chart.js from cdnjs). |
 | `scripts/refresh.py` | Rebuilds the dataset into `<workdir>/out/` (`etfs.json` plus `d/<k>.json` shards). |
-| `.github/workflows/refresh-and-deploy.yml` | Rebuilds the data Tue–Sat at 10:47 Bangkok time and deploys to GitHub Pages. |
+| `thai/scripts/sec_fetch.py` | Downloads Thai fund NAV, dividends and fund profiles from the SEC Thailand Open API. |
+| `thai/scripts/build.py` | Turns that into the same `etfs.json` + shards format for the Thai page. |
+| `thai/scripts/make_page.py` | Generates `thai/index.html` from `index.html`, so both pages share one codebase. |
+| `.github/workflows/refresh-and-deploy.yml` | Rebuilds both datasets Tue–Sat at 10:47 Bangkok time and deploys to GitHub Pages. |
 
 The data files (~31 MB) are generated, not committed.
 
@@ -37,6 +40,19 @@ The data files (~31 MB) are generated, not committed.
   - Further proxies are added in `PROXIES` in `refresh.py`.
 
 This is for research and education, not investment advice.
+
+## Thai fund version (`/thai`)
+
+This page has the same charts, table, optimizers and simulator as the US page, but uses Thai mutual funds: every class, including RMF, SSF and Thai ESG.
+
+- **Data:** daily NAV and dividends since 2016, from the [SEC Thailand Open API](https://api-portal.sec.or.th). Total return reinvests each dividend on the day the NAV goes ex-dividend. Returns are in baht.
+- **Key:** set it up once by saving a free SEC Open API key as the repository secret `SEC_API_KEY` (or `InvestorBotFundNAV`). The key needs the fund general-info, factsheet and daily-info products.
+- **History:** stored on the `thai-data` branch.
+  - The first run downloads about 10 years of NAV, which takes a few hours. The page fills in as it goes.
+  - Later runs only fetch the latest two months.
+- **Other conventions:**
+  - **Cash and Sharpe ratio:** "Optionality" cash and the Sharpe ratio use the largest Thai money-market fund.
+  - **Annualizing:** uses the number of Thai NAV days per year.
 
 ## Run locally
 

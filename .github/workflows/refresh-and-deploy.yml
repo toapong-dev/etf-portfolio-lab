@@ -4,28 +4,34 @@ on:
   schedule:
     - cron: "47 3 * * 2-6"   # 10:47 Asia/Bangkok, Tue-Sat (after US closes)
   workflow_dispatch:
+    inputs:
+      thai_budget:
+        description: "Minutes to spend downloading Thai NAV history"
+        default: "270"
   push:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write   # to save the Thai NAV history on the thai-data branch
   pages: write
   id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Rebuild dataset
+
+      # ---- US ETFs ----
+      - name: Rebuild US ETF dataset
         run: python3 -I scripts/refresh.py "$RUNNER_TEMP/work"
       - name: Assemble site
         run: |
@@ -33,7 +39,48 @@ jobs:
           cp index.html site/
           cp -r "$RUNNER_TEMP/work/out/." site/
           mkdir -p site/build && cp scripts/refresh.py site/build/refresh.py.txt
-          ls -la site | head
+
+      # ---- Thai funds (SEC Thailand Open API) ----
+      - name: Restore Thai NAV history
+        id: thai_restore
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          ref: thai-data
+          path: thai-data
+      - name: Fetch Thai fund data from the SEC
+        continue-on-error: true
+        env:
+          SEC_API_KEY: ${{ secrets.SEC_API_KEY || secrets.INVESTORBOTFUNDNAV }}
+        run: |
+          mkdir -p thai-data
+          python3 -I thai/scripts/sec_fetch.py thai-data --since 2016-01-01 --budget-min ${{ github.event.inputs.thai_budget || (github.event_name == 'push' && '5') || '270' }}
+      - name: Save Thai NAV history
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd thai-data
+          [ -f profiles.json.gz ] || { echo "no Thai data yet"; exit 0; }
+          [ -d .git ] || git init -q
+          git checkout -q --orphan snapshot
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -qm "Thai NAV data $(date -u +%F)"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:refs/heads/thai-data
+      - name: Build Thai fund page
+        continue-on-error: true
+        run: |
+          mkdir -p site/thai
+          if [ -f thai-data/profiles.json.gz ]; then
+            if python3 -I thai/scripts/build.py thai-data site/thai thai/categories.csv; then
+              python3 -I thai/scripts/make_page.py index.html site/thai/index.html
+            else
+              cp thai/pending.html site/thai/index.html
+            fi
+          else
+            cp thai/pending.html site/thai/index.html
+          fi
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
