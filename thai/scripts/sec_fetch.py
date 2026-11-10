@@ -79,19 +79,23 @@ def wgz(name, text):
     with gzip.open(tmp, 'wt', encoding='utf8', compresslevel=9) as f: f.write(text)
     os.replace(tmp, f'{DATA}/{name}')
 
-# 1. profiles (fund list, classes, master funds)
-prof = list(pages('/v2/fund/general-info/profiles', {}))
+# 1. profiles (fund list, classes, master funds): slow (~3 s a call), so refresh at most weekly
+pp = f'{DATA}/profiles.json.gz'
+fresh = os.path.exists(pp) and time.time() - os.path.getmtime(pp) < 6 * 86400 and os.environ.get('SEC_FORCE_PROFILES') != '1'
+prof = [] if fresh else list(pages('/v2/fund/general-info/profiles', {}))
 keep = ['proj_id', 'proj_abbr_name', 'proj_name_en', 'proj_name_th', 'comp_name_en', 'unique_id', 'fund_status', 'regis_date', 'cancel_date',
         'management_style', 'feederfund_master_fund', 'invest_country_flag', 'fund_class_name', 'fund_class_tax_incentive_type', 'fund_class_isin_code']
-wgz('profiles.json.gz', json.dumps([{k: p.get(k) for k in keep} for p in prof], ensure_ascii=False, separators=(',', ':')))
-print('profiles', len(prof), 'calls', CALLS[0], flush=True)
+if prof:
+    wgz('profiles.json.gz', json.dumps([{k: p.get(k) for k in keep} for p in prof], ensure_ascii=False, separators=(',', ':')))
+print('profiles', len(prof) if prof else 'kept (fetched this week)', 'calls', CALLS[0], f'{int(time.time()-T0)}s', flush=True)
 
 # 2. dividends
 dv = list(pages('/v2/fund/daily-info/dividend-history', {}))
 buf = io.StringIO(); w = csv.writer(buf)
 for d in dv: w.writerow([d.get('proj_id'), d.get('class_abbr_name'), d.get('book_close_date'), d.get('dividend_date'), d.get('dividend_value')])
 wgz('dividends.csv.gz', buf.getvalue())
-print('dividends', len(dv), 'calls', CALLS[0], flush=True)
+print('dividends', len(dv), 'calls', CALLS[0], f'{int(time.time()-T0)}s', flush=True)
+T1 = time.time()  # the time budget covers the NAV download
 
 # 3. NAV by month
 state_p = f'{DATA}/state.json'
@@ -111,30 +115,34 @@ print('months to fetch', len(todo), flush=True)
 def fetch_month(m):
     y, mm = map(int, m.split('-'))
     end = (dt.date(y + (mm == 12), mm % 12 + 1, 1) - dt.timedelta(days=1))
-    rows = []
-    # one week at a time keeps cursors short and lets threads share the work
-    d0 = dt.date(y, mm, 1)
-    while d0 <= end:
-        d1 = min(end, d0 + dt.timedelta(days=6))
-        for it in pages('/v2/fund/daily-info/nav', {'start_nav_date': d0.isoformat(), 'end_nav_date': d1.isoformat()}):
+    # each day is its own cursor (~60 pages of 100), fetched in parallel: the API answers in ~1 s,
+    # so parallel cursors are what lets the run approach the 5,000-calls-per-5-minutes limit
+    def day(d):
+        out = []
+        for it in pages('/v2/fund/daily-info/nav', {'start_nav_date': d.isoformat(), 'end_nav_date': d.isoformat()}):
             if it.get('last_val') in (None, '', 0): continue
-            rows.append((it.get('proj_id'), it.get('fund_class_name') or 'main', it.get('nav_date'), it.get('last_val'), it.get('net_asset')))
-        d0 = d1 + dt.timedelta(days=1)
+            out.append((it.get('proj_id'), it.get('fund_class_name') or 'main', it.get('nav_date'), it.get('last_val'), it.get('net_asset')))
+        return out
+    days = [dt.date(y, mm, 1) + dt.timedelta(days=i) for i in range((end - dt.date(y, mm, 1)).days + 1)]
+    days = [d for d in days if d.weekday() < 5 and d <= today]
+    rows = []
+    with ThreadPoolExecutor(6) as inner:
+        for out in inner.map(day, days): rows.extend(out)
     rows.sort(key=lambda r: (r[0], r[1], r[2]))
     buf = io.StringIO(); w = csv.writer(buf); w.writerows(rows)
     wgz(f'nav/{m}.csv.gz', buf.getvalue())
     return m, len(rows)
 
 done_now = 0
-with ThreadPoolExecutor(6) as ex:
+with ThreadPoolExecutor(4) as ex:
     futs = {}
     it = iter(todo)
     def submit_next():
-        if time.time() - T0 > BUDGET: return False
+        if time.time() - T1 > BUDGET: return False
         m = next(it, None)
         if m is None: return False
         futs[ex.submit(fetch_month, m)] = m; return True
-    for _ in range(6): submit_next()
+    for _ in range(4): submit_next()
     while futs:
         for f in as_completed(list(futs)):
             m = futs.pop(f)
