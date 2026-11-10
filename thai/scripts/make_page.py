@@ -30,7 +30,7 @@ src = re.sub(r'<p class="foot">Data: daily closes.*?</p>', '<p class="foot">Data
 R("const THAI = {VT:'TLWORLD-X', QQQ:'TLUSNDQ-H · TNASDAQ', SMH:'TLSEMICON · SCBSEMI (UCITS twin)', XLV:'TUSHEALTH-A', SCHD:'TLUSHD-H', SGOV:'TLUSGOV', VDC:null};",
   "let CASHT='KKP CASH', PPY=__PPY__; const isCashLike=t=>t===CASHT||t==='TLUSGOV'||/Money Market/.test((D.meta[t]||{}).c||'');")
 R("const EXAMPLE = {holdings:[['VT',40],['QQQ',5],['SMH',5],['VDC',10],['XLV',10],['SCHD',10],['SGOV',15]], opt:5};",
-  "const EXAMPLE = {holdings:[['TLWORLD-X',40],['TNASDAQ-A',5],['TLSEMICON-H',5],['TISCOGC',10],['TUSHEALTH-A',10],['TLUSHD-H',10],['TLUSGOV',15]], opt:5};")
+  "const EXAMPLE = {holdings:[['B-INNOTECHRMF',20],['K-GTECH',20],['MM-RMF',30],['B-CHINAARMF',20],['BGOLD',10]], opt:0};")
 R("DATES=j.dates; N=DATES.length;", "DATES=j.dates; N=DATES.length; if(j.cash) CASHT=j.cash; if(j.ppy) PPY=j.ppy; D.backfill=j.backfill_left;")
 R("localStorage.getItem('etfLab.v1')", "localStorage.getItem('thaiLab.v1')")
 R("localStorage.setItem('etfLab.v1'", "localStorage.setItem('thaiLab.v1'")
