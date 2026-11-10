@@ -30,7 +30,7 @@ for pid, rows in classes.items():
         if len(rows) == 1: key2code[(pid, 'main')] = code
         # prefer an active record when a code appears more than once
         old = meta.get(code)
-        if old is None or (old['status'] not in ('RG', 'IPO') and p.get('fund_status') in ('RG', 'IPO')):
+        if old is None or (old['status'] not in ('Registered', 'IPO') and p.get('fund_status') in ('Registered', 'IPO')):
             meta[code] = {'pid': pid, 'name': p.get('proj_name_en') or p.get('proj_name_th') or code, 'name_th': p.get('proj_name_th'),
                           'amc': p.get('comp_name_en') or p.get('unique_id') or '', 'master': p.get('feederfund_master_fund'),
                           'status': p.get('fund_status'), 'regis': p.get('regis_date'), 'tax': p.get('fund_class_tax_incentive_type'),

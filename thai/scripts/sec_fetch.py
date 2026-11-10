@@ -94,12 +94,23 @@ if prof:
     wgz('profiles.json.gz', json.dumps([{k: p.get(k) for k in keep} for p in prof], ensure_ascii=False, separators=(',', ':')))
 print('profiles', len(prof) if prof else 'kept (fetched this week)', 'calls', CALLS[0], f'{int(time.time()-T0)}s', flush=True)
 
-# 2. dividends
-dv = list(pages('/v2/fund/daily-info/dividend-history', {}))
-buf = io.StringIO(); w = csv.writer(buf)
-for d in dv: w.writerow([d.get('proj_id'), d.get('class_abbr_name'), (d.get('book_close_date') or '')[:10], (d.get('dividend_date') or '')[:10], d.get('dividend_value')])
+# 2. dividends. The unfiltered list only carries part of the history, so when profiles refresh (weekly)
+#    each registered fund is asked for its own; on other days the unfiltered list is merged in for new payouts.
+def drow(d): return (d.get('proj_id'), d.get('class_abbr_name'), (d.get('book_close_date') or '')[:10], (d.get('dividend_date') or '')[:10], str(d.get('dividend_value')))
+dp = f'{DATA}/dividends.csv.gz'
+have = set(tuple(r) for r in csv.reader(gzip.open(dp, 'rt', encoding='utf8'))) if os.path.exists(dp) else set()
+dv = [drow(d) for d in pages('/v2/fund/daily-info/dividend-history', {})]
+if prof or not state.get('div_full'):
+    plist = prof or json.load(gzip.open(pp, 'rt', encoding='utf8'))
+    pids = sorted({p['proj_id'] for p in plist if p.get('fund_status') in ('Registered', 'IPO', 'RG') and p.get('proj_id')})
+    with ThreadPoolExecutor(12) as ex:
+        for lst in ex.map(lambda pid: [drow(d) for d in pages('/v2/fund/daily-info/dividend-history', {'proj_id': pid})], pids): dv.extend(lst)
+    state['div_full'] = time.time()
+    print('dividend history asked per fund for', len(pids), 'funds', flush=True)
+allrows = sorted(have | set(dv))
+buf = io.StringIO(); w = csv.writer(buf); w.writerows(allrows)
 wgz('dividends.csv.gz', buf.getvalue())
-print('dividends', len(dv), 'calls', CALLS[0], f'{int(time.time()-T0)}s', flush=True)
+print('dividends', len(allrows), 'calls', CALLS[0], f'{int(time.time()-T0)}s', flush=True)
 T1 = time.time()  # the time budget covers the NAV download
 
 # 3. NAV by month
