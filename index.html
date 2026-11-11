@@ -367,7 +367,7 @@ table.cmp{min-width:860px}
     <p class="foot" id="optNote"></p>
   </section>
 
-  <p class="foot">Data: daily closes and dividends for every US-listed ETF in a public GitHub archive that mirrors Yahoo Finance (over 5,700 funds; names, categories, fees, assets and yields from the same archive's fund metadata). Total return is rebuilt by reinvesting each dividend on its ex-date, back to 1993 where a fund is that old. Checked against the YTD, 10Y and 20Y returns in your screenshot (within 0.05 points). A scheduled task rebuilds the dataset after each US trading day, and the Refresh button starts a rebuild on demand. Very recent dividends can be missing for a few weeks. VHYA (Vanguard FTSE All-World High Dividend Yield UCITS, USD Accumulating, London) is not in the US data source, so it is shown as a proxy: 38.5% VYM (FTSE US High Dividend Yield) plus 61.5% VYMI (FTSE All-World ex-US High Dividend Yield), its index's two halves at the fund's 30 Sep 2026 US weight, rebalanced monthly, minus VHYA's 0.16% higher fee. Against VHYA's Xetra listing (converted to USD) from 2021 to Feb 2026, weekly returns correlated 0.93 and the proxy ran about 1 point a year ahead. Thai feeder codes come from the "Map example portfolio to Thai feeder funds" note in this project; SMH maps to a UCITS semiconductor fund, and no Thai feeder was found for VDC. Not investment advice: optimizer results are fit to past data and change with the lookback.</p>
+  <p class="foot">Data: daily closes and dividends for every US-listed ETF in a public GitHub archive that mirrors Yahoo Finance (over 5,700 funds; names, categories, fees, assets and yields from the same archive's fund metadata). Total return is rebuilt by reinvesting each dividend on its ex-date, back to 1993 where a fund is that old. Checked against the YTD, 10Y and 20Y returns in your screenshot (within 0.05 points). A scheduled task rebuilds the dataset after each US trading day, and the Refresh button starts a rebuild on demand. Very recent dividends can be missing for a few weeks. VHYA (Vanguard FTSE All-World High Dividend Yield UCITS, USD Accumulating, London) is not in the US data source, so it is shown as a proxy: 38.5% VYM (FTSE US High Dividend Yield) plus 61.5% VYMI (FTSE All-World ex-US High Dividend Yield), its index's two halves at the fund's 30 Sep 2026 US weight, rebalanced monthly, minus VHYA's 0.16% higher fee. Against VHYA's Xetra listing (converted to USD) from 2021 to Feb 2026, weekly returns correlated 0.93 and the proxy ran about 1 point a year ahead. Two Luxembourg funds are added for tracking as masters of Thai feeders: FID-GTECH is Fidelity Funds Global Technology (Y-Acc-USD class, LU1560650563; B-INNOTECH invests in it) and CT-GTECH is CT (Lux) Global Technology (IU USD class, LU0444972805; K-GTECH invests in it). Their daily NAVs in USD come from CSV exports (Morningstar and FT.com), not from a live feed, so they update only when a newer export is added; CT-GTECH starts 9 Jan 2020 because that share class was relaunched then. Other share classes of the same funds differ only by fees and currency hedging. Thai feeder codes come from the "Map example portfolio to Thai feeder funds" note in this project; SMH maps to a UCITS semiconductor fund, and no Thai feeder was found for VDC. Not investment advice: optimizer results are fit to past data and change with the lookback.</p>
 </div>
 <div class="toast" id="toast" role="status"></div>
 
@@ -392,7 +392,7 @@ async function ensure(list){
 }
 const SLOTS = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#6250d6','#e34948'];
 const INK = '#0f1720';
-const THAI = {VT:'TLWORLD-X', QQQ:'TLUSNDQ-H · TNASDAQ', SMH:'TLSEMICON · SCBSEMI (UCITS twin)', XLV:'TUSHEALTH-A', SCHD:'TLUSHD-H', SGOV:'TLUSGOV', VDC:null};
+const THAI = {VT:'TLWORLD-X', QQQ:'TLUSNDQ-H · TNASDAQ', SMH:'TLSEMICON · SCBSEMI (UCITS twin)', XLV:'TUSHEALTH-A', SCHD:'TLUSHD-H', SGOV:'TLUSGOV', VDC:null, 'FID-GTECH':'B-INNOTECH (feeder)', 'CT-GTECH':'K-GTECH (feeder)'};
 const EXAMPLE = {holdings:[['VT',40],['QQQ',5],['SMH',5],['VDC',10],['XLV',10],['SCHD',10],['SGOV',15]], opt:5};
 const MAXN = 8;
 const fmtDate = d => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'});
@@ -650,7 +650,7 @@ function renderPerf(){
     const vol=stdev(dailyRets(s,a3,b))*Math.sqrt(252);
     const dd=maxDD(s,s.a,b);
     const sw = k==='PORT' ? INK : colorOf(k);
-    const name = k==='PORT' ? '<span class="fname">Your weights</span>' : `<span class="fname">${D.t[k].n}</span>${D.meta[k]&&D.meta[k].proxy?`<span class="fname">${proxyNote(k)}</span>`:''}`;
+    const name = k==='PORT' ? '<span class="fname">Your weights</span>' : `<span class="fname">${D.t[k].n}</span>${D.meta[k]&&(D.meta[k].proxy||D.meta[k].note)?`<span class="fname">${lastCloseNote(k)}</span>`:''}`;
     const px = k==='PORT' || D.t[k].px==null ? '–' : '$'+D.t[k].px.toFixed(2);
     rows.length && (html += `<tr class="${k==='PORT'?'portrow':''}"><td><span class="tick"><span class="sw" style="background:${sw}"></span>${label}</span>${name}</td>${cells}<td>${pct(vol,1,false)}</td><td class="down">${pct(dd,1)}</td><td>${px}</td></tr>`);
   });
@@ -1018,7 +1018,8 @@ const TRIGGER_ID='trig_01TgB6Za1UJvnn4ajxLguAfE';
 const fmtDT = iso => { if(!iso) return '–'; const d=new Date(iso.replace(/Z$/,':00Z').replace(/:00:00Z$/,':00Z')); return isNaN(d) ? iso : d.toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}); };
 function tradingDaysBehind(dateStr){ const i=DATES.indexOf(dateStr); return i<0 ? null : (N-1-i); }
 function proxyNote(t){ const m=D.meta[t]; return m && m.proxy ? `<span class="proxy-tag" title="This fund trades outside the US and its prices are not in the data source, so its history is rebuilt from US-listed funds that track the two halves of the same index.">Proxy: ${m.proxy}</span>` : ''; }
-function lastCloseNote(t){ const m=D.meta[t]; if(!m) return ''; if(m.proxy) return proxyNote(t); const d=DATES[m.e], lag=tradingDaysBehind(d); return lag>3 ? `<span class="stale-tag">Stale · last close ${fmtDate(d)}</span>` : `Last close ${fmtDate(d)}`; }
+function noteTag(t){ const m=D.meta[t]; return m && m.note ? `<span class="proxy-tag" title="Not in the US data source. Daily NAV comes from a CSV you exported; refresh it by adding a newer export to the repo's data/manual folder.">${m.note}</span> · ` : ''; }
+function lastCloseNote(t){ const m=D.meta[t]; if(!m) return ''; if(m.proxy) return proxyNote(t); const d=DATES[m.e], lag=tradingDaysBehind(d); return noteTag(t) + (lag>3 ? `<span class="stale-tag">Stale · last ${m.note?"NAV":"close"} ${fmtDate(d)}</span>` : `Last ${m.note?'NAV':'close'} ${fmtDate(d)}`); }
 function renderFreshness(){
   const ageDays=(Date.now()-Date.parse(ASOF+'T21:00:00Z'))/864e5;
   document.getElementById('stamp').textContent=`${D.list.length.toLocaleString('en-US')} US ETFs · prices through ${fmtDate(ASOF)}`;
@@ -1087,7 +1088,7 @@ function renderScreener(){
   let rows=D.list.filter(m=>{
     if(hideLev && /^Trading--/.test(m.c||'')) return false;
     if(cat && (m.c||'Uncategorized')!==cat) return false;
-    if(minA && !m.proxy && !((m.aum||0)>=minA)) return false;
+    if(minA && !m.proxy && !m.note && !((m.aum||0)>=minA)) return false;
     if(q && !(m.t.startsWith(q) || (m.n||'').toUpperCase().includes(q))) return false;
     return true;
   });
@@ -1096,7 +1097,7 @@ function renderScreener(){
   const held=new Set(S.holdings.map(h=>h.t)), full=S.holdings.length>=MAXN;
   let h='<thead><tr>'+SCOLS.map(([k,l])=>`<th class="sortable" data-k="${k}" ${k===key?`aria-sort="${dir==='asc'?'ascending':'descending'}"`:''} tabindex="0">${l}</th>`).join('')+'<th></th></tr></thead><tbody>';
   rows.slice(0,SCR.lim).forEach(m=>{
-    h+=`<tr><td><span class="tick">${m.t}</span><span class="fname" title="${m.n.replace(/"/g,'&quot;')}">${m.n}</span>${tradingDaysBehind(DATES[m.e])>3||m.proxy?`<span class="fname">${lastCloseNote(m.t)}</span>`:''}</td><td class="cat" title="${m.c}">${m.c||'–'}</td>`;
+    h+=`<tr><td><span class="tick">${m.t}</span><span class="fname" title="${m.n.replace(/"/g,'&quot;')}">${m.n}</span>${tradingDaysBehind(DATES[m.e])>3||m.proxy||m.note?`<span class="fname">${lastCloseNote(m.t)}</span>`:''}</td><td class="cat" title="${m.c}">${m.c||'–'}</td>`;
     SCOLS.slice(2).forEach(([k,l,f])=>{ const v=scrVal(m,k); if(k in RIDX) h+=`<td class="${cls(v)}">${pct(v,1)}</td>`; else h+=`<td>${f(v)}</td>`; });
     h+=`<td><button class="btn addb" type="button" data-t="${m.t}" ${held.has(m.t)||full?'disabled':''}>${held.has(m.t)?'Added':'Add'}</button></td></tr>`;
   });
