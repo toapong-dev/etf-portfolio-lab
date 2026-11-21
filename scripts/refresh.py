@@ -91,6 +91,27 @@ for pt,cfg in PROXIES.items():
     recs[pt]={'t':pt,'d':common,'L':[round(x*1e4) for x in out],'px':None,'big':0,'proxy':' + '.join(f"{int(w*1000)/10:g}% {a}" for a,w in cfg['legs'])}
     meta[pt]=cfg['meta']
     print('proxy',pt,common[0],common[-1],len(common))
+# ---- manual series: funds with no public daily feed, from NAV CSVs TR exported (date,nav; accumulating, USD) ----
+# Looked up next to this script (../data/manual), then in <workdir>/manual, then on the repo's main branch.
+MANUAL={'FID-GTECH':{'name':'Fidelity Funds Global Technology Fund Y-Acc-USD','category':'Technology','family':'Fidelity (UCITS, Luxembourg)','isin':'LU1560650563','note':'Master of B-INNOTECH'},
+        'CT-GTECH':{'name':'CT (Lux) Global Technology IU USD','category':'Technology','family':'Columbia Threadneedle (UCITS, Luxembourg)','isin':'LU0444972805','note':'Master of K-GTECH'}}
+MDIRS=[os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','data','manual'),WORK+'/manual']
+for mt,cfg in MANUAL.items():
+    txt=None
+    for d in MDIRS:
+        p=os.path.join(d,mt+'.csv')
+        if os.path.exists(p): txt=open(p).read(); break
+    for ref in ([] if txt else ['HEAD','master-funds']):
+        r=subprocess.run(['curl','-sSL','-m','60','--fail',f'{RAWGH}/toapong-dev/etf-portfolio-lab/{ref}/data/manual/{mt}.csv'],capture_output=True)
+        if r.returncode==0: txt=r.stdout.decode(); break
+    if txt is None: print('manual skip',mt); continue
+    pts=[l.split(',') for l in txt.splitlines() if l[:1].isdigit()]
+    pts=[(d[:10],float(v)) for d,v in pts if float(v)>0]
+    if len(pts)<10: print('manual short',mt); continue
+    L0=math.log(pts[0][1])
+    recs[mt]={'t':mt,'d':[d for d,_ in pts],'L':[round((math.log(v)-L0)*1e4) for _,v in pts],'px':pts[-1][1],'big':0,'manual':True,'note':cfg['note']+' · '+cfg['isin']}
+    meta[mt]={'name':cfg['name'],'category':cfg['category'],'family':cfg['family'],'expense_ratio':None,'net_assets':None,'yield':None,'inception':pts[0][0]}
+    print('manual',mt,pts[0][0],pts[-1][0],len(pts))
 spy=recs['SPY']; DATES=[d for d in spy['d'] if d>='1993-01-29']
 # allow trailing dates beyond SPY's last if common
 pos={d:i for i,d in enumerate(DATES)}
@@ -103,7 +124,7 @@ def on_or_before(d): return bisect.bisect_right(DATES,d)-1
 index=[]; series={}
 skipped={'stale':0,'short':0}
 for t,r in sorted(recs.items()):
-    if r['d'][-1]<CUT: skipped['stale']+=1; continue
+    if r['d'][-1]<CUT and not r.get('manual'): skipped['stale']+=1; continue
     # map onto global axis with ffill
     dl=r['d']; L=r['L']; j=0; first=None; vals=[]
     s=bisect.bisect_left(DATES,dl[0]); e=on_or_before(dl[-1])
@@ -134,7 +155,7 @@ for t,r in sorted(recs.items()):
     dd=round(math.exp(dd/1e4)-1,4)
     index.append({'t':t,'n':m.get('name') or t,'c':m.get('category') or '','f':m.get('family') or '',
         'er':m.get('expense_ratio'),'aum':m.get('net_assets'),'y':m.get('yield'),'inc':m.get('inception') or DATES[s],
-        's':s,'e':e,'px':r['px'],'proxy':r.get('proxy'),
+        's':s,'e':e,'px':r['px'],'proxy':r.get('proxy'),'note':r.get('note'),
         'r':[ret(1),ret(3),ret(6),ret(ytd=True),ret(12),ret(36),ret(60),ret(120),ret(240)],'v':vol,'dd':dd,'flag':r.get('big',0)})
 print('kept',len(index),'skipped',skipped)
 # shards by size
@@ -151,8 +172,8 @@ for k,sh in enumerate(shards):
     json.dump(obj,open(f'{OUTD}/d/{k}.json','w'),separators=(',',':'))
     for t,_,_ in sh: next(i for i in index if i['t']==t)['k']=k
 def r4(x): return None if x is None else float(f'{x:.4g}')
-rows=[[i['t'],i['n'],i['c'],i['f'],r4(i['er']),r4(i['aum']),r4(i['y']),i['inc'],i['s'],i['e'],i['px'],i['k'],i['r'],i['v'],i['dd'],i['flag'],i.get('proxy')] for i in index]
+rows=[[i['t'],i['n'],i['c'],i['f'],r4(i['er']),r4(i['aum']),r4(i['y']),i['inc'],i['s'],i['e'],i['px'],i['k'],i['r'],i['v'],i['dd'],i['flag'],i.get('proxy'),i.get('note')] for i in index]
 metaj=json.load(open(META))
-json.dump({'asof':LAST,'built':dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%MZ'),'src_updated':metaj.get('updated_utc'),'dates':DATES,'cols':['t','n','c','f','er','aum','y','inc','s','e','px','k','r','v','dd','flag','proxy'],'etfs':rows},open(f'{OUTD}/etfs.json','w'),separators=(',',':'))
+json.dump({'asof':LAST,'built':dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%MZ'),'src_updated':metaj.get('updated_utc'),'dates':DATES,'cols':['t','n','c','f','er','aum','y','inc','s','e','px','k','r','v','dd','flag','proxy','note'],'etfs':rows},open(f'{OUTD}/etfs.json','w'),separators=(',',':'))
 tot=sum(os.path.getsize(f'{OUTD}/d/{k}.json') for k in range(len(shards)))
 print('shards',len(shards),'total MB',tot/1e6,'index MB',os.path.getsize(f'{OUTD}/etfs.json')/1e6)

@@ -77,5 +77,38 @@ R("Stale · last close ${fmtDate(d)}", "Stale · last NAV ${fmtDate(d)}")
 R("let MCP=null;", "let MCP=null; /* no on-demand rebuild for the Thai page: the button re-checks the published data */")
 R("MCP = window.claude && claude.use ? await claude.use('mcp') : null;", "MCP = null;")
 R("holdings: EXAMPLE.holdings.map(([t,w],i)=>", "holdings: EXAMPLE.holdings.filter(([t])=>D.meta[t]).map(([t,w],i)=>")
+
+# fund database returns (only shown when the dataset carries them)
+R('<p class="foot" id="perfNote"></p>', '''<p class="foot" id="perfNote"></p>
+    <div id="dbBox" hidden style="margin-top:18px">
+      <h3 style="margin:0 0 4px;font-size:15px">Fund database returns</h3>
+      <p class="sub" style="font-size:13px;margin:0 0 8px" id="dbSub"></p>
+      <div class="tscroll"><table class="perf" id="dbPerf"></table></div>
+      <p class="foot" id="dbNote"></p>
+    </div>''')
+R("DATES=j.dates; N=DATES.length;", "DATES=j.dates; N=DATES.length; D.dbcols=j.dbcols||[]; D.dbasof=j.dbasof;")
+R("renderChart(); renderPerf();", "renderChart(); renderPerf(); renderDb();")
+R("/* ---------- performance table ---------- */", '''/* ---------- fund database returns ---------- */
+function renderDb(){
+  const box=document.getElementById('dbBox'); const cols=D.dbcols||[];
+  if(!cols.length){ box.hidden=true; return; }
+  const pw=portfolioWeights(); const rows=[];
+  if(pw) rows.push(['PORT','Portfolio']); S.holdings.forEach(h=>rows.push([h.t,h.t]));
+  const dbOf=t=> t==='CASH' ? cols.map(()=>0) : ((D.meta[t]||{}).db||null);
+  let html='<thead><tr><th>Fund</th>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>';
+  rows.forEach(([k,label])=>{
+    let vals;
+    if(k==='PORT'){
+      vals=cols.map((_,i)=>{ let s=0; for(const t in pw.wts){ const d=dbOf(t); const v=d&&d[i]; if(v==null) return null; s+=pw.wts[t]*v; } return s; });
+    } else vals=(dbOf(k)||cols.map(()=>null));
+    const sw = k==='PORT' ? INK : colorOf(k);
+    html+=`<tr class="${k==='PORT'?'portrow':''}"><td><span class="tick"><span class="sw" style="background:${sw}"></span>${label}</span></td>`+vals.map(v=>`<td class="${cls(v)}">${pct(v)}</td>`).join('')+'</tr>';
+  });
+  html+='</tbody>'; document.getElementById('dbPerf').innerHTML=html; box.hidden=false;
+  document.getElementById('dbSub').textContent=`From your fund database${D.dbasof?` (as of ${D.dbasof})`:''}. It covers 10 years and every calendar year since 2014, so it fills in history the daily NAV download does not reach yet.`;
+  document.getElementById('dbNote').textContent='3Y, 5Y and 10Y are annualized; years are calendar-year returns. The portfolio row is the weighted average of the funds (yearly rebalancing) and shows "–" when any held fund has no figure for that column. Optionality cash uses '+CASHT+'.';
+}
+/* ---------- performance table ---------- */''')
+
 open(sys.argv[2], 'w', encoding='utf8').write(src)
 print('thai page ok', len(src))
